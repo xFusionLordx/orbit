@@ -177,6 +177,13 @@ impl Theme {
         let destructive_hover = self.adjust_color(destructive, 0.15);
         
         format!(r#"
+@define-color accent_color {accent};
+@define-color accent_bg_color {accent};
+@define-color accent_fg_color {accent_fg};
+@define-color destructive_color {destructive};
+@define-color destructive_bg_color {destructive};
+@define-color destructive_fg_color #ffffff;
+
 /* ========================================
    ORBIT DYNAMIC THEME
    ======================================== */
@@ -193,12 +200,6 @@ impl Theme {
 }}
 
 window {{
-    --accent-color: {accent};
-    --accent-bg-color: {accent};
-    --accent-fg-color: {accent_fg};
-    --destructive-color: {destructive};
-    --destructive-bg-color: {destructive};
-    --destructive-fg-color: #ffffff;
     background: none;
     background-color: transparent;
     box-shadow: none;
@@ -594,7 +595,9 @@ entry:focus, password-entry:focus {{
 
 /* Power toggle switch */
 window switch.orbit-toggle-switch,
-window switch.orbit-toggle-switch:not(:backdrop) {{
+window switch.orbit-toggle-switch:not(:backdrop),
+window switch.orbit-toggle-switch trough,
+window switch.orbit-toggle-switch:not(:backdrop) trough {{
     background-color: rgba(255, 255, 255, 0.12) !important;
     background-image: none !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
@@ -606,7 +609,9 @@ window switch.orbit-toggle-switch:not(:backdrop) {{
 
 window switch.orbit-toggle-switch:checked,
 window switch.orbit-toggle-switch:checked:not(:backdrop),
-window switch.orbit-toggle-switch:checked:hover {{
+window switch.orbit-toggle-switch:checked:hover,
+window switch.orbit-toggle-switch:checked trough,
+window switch.orbit-toggle-switch:checked:not(:backdrop) trough {{
     background-color: {accent} !important;
     background-image: none !important;
     border-color: {accent} !important;
