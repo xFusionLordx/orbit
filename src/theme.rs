@@ -587,8 +587,10 @@ entry:focus, password-entry:focus {{
 }}
 
 /* Power toggle switch */
-.orbit-toggle-switch {{
-    background: rgba(255, 255, 255, 0.12) !important;
+window switch.orbit-toggle-switch,
+window switch.orbit-toggle-switch:not(:backdrop) {{
+    background-color: rgba(255, 255, 255, 0.12) !important;
+    background-image: none !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
     box-shadow: none !important;
     border-radius: 9999px;
@@ -596,23 +598,27 @@ entry:focus, password-entry:focus {{
     min-height: 24px;
 }}
 
-.orbit-toggle-switch slider {{
-    background: #ffffff;
+window switch.orbit-toggle-switch:checked,
+window switch.orbit-toggle-switch:checked:not(:backdrop),
+window switch.orbit-toggle-switch:checked:hover {{
+    background-color: {accent} !important;
+    background-image: none !important;
+    border-color: {accent} !important;
+    box-shadow: none !important;
+}}
+
+window switch.orbit-toggle-switch slider {{
+    background-color: #ffffff !important;
     border-radius: 9999px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
     min-width: 18px;
     min-height: 18px;
     margin: 3px;
 }}
 
-.orbit-toggle-switch:checked {{
-    background: {accent} !important;
-    border-color: {accent} !important;
-    box-shadow: none !important;
-}}
-
-.orbit-toggle-switch:checked slider {{
-    background: {accent_fg} !important;
+window switch.orbit-toggle-switch:checked slider,
+window switch.orbit-toggle-switch:checked:not(:backdrop) slider {{
+    background-color: {accent_fg} !important;
 }}
 
 .orbit-battery-mini {{
