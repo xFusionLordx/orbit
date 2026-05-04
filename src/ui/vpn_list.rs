@@ -52,17 +52,18 @@ impl VpnList {
             .orientation(Orientation::Vertical)
             .vexpand(true)
             .hexpand(true)
-            .spacing(16)
+            .spacing(0)
             .build();
 
         // Privacy Dashboard Header
         let dashboard = gtk::Box::builder()
             .orientation(Orientation::Vertical)
             .css_classes(["orbit-vpn-dashboard"])
-            .spacing(12)
+            .spacing(6)
             .margin_start(12)
             .margin_end(12)
-            .margin_top(8)
+            .margin_top(4)
+            .margin_bottom(4)
             .build();
 
         let dash_title = gtk::Label::builder()
@@ -74,18 +75,18 @@ impl VpnList {
 
         let info_grid = gtk::Box::builder()
             .orientation(Orientation::Vertical)
-            .spacing(10)
+            .spacing(6)
             .build();
 
         // IP & ISP Row
         let ip_row = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
-            .spacing(12)
+            .spacing(10)
             .build();
 
         let ip_icon = gtk::Image::builder()
             .icon_name("network-vpn-symbolic")
-            .pixel_size(24)
+            .pixel_size(20)
             .css_classes(["orbit-icon-accent"])
             .valign(gtk::Align::Center)
             .build();
@@ -117,18 +118,18 @@ impl VpnList {
         // DNS Section — clickable summary + expandable details
         let dns_section = gtk::Box::builder()
             .orientation(Orientation::Vertical)
-            .spacing(4)
+            .spacing(2)
             .build();
 
         let dns_header_row = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
-            .spacing(12)
+            .spacing(10)
             .css_classes(["orbit-dns-header"])
             .build();
 
         let dns_icon = gtk::Image::builder()
             .icon_name("web-browser-symbolic")
-            .pixel_size(24)
+            .pixel_size(20)
             .css_classes(["orbit-signal-icon"])
             .valign(gtk::Align::Center)
             .build();
@@ -138,24 +139,17 @@ impl VpnList {
             .hexpand(true)
             .build();
 
-        let dns_title = gtk::Label::builder()
-            .label("DNS")
-            .css_classes(["orbit-section-header"])
-            .halign(gtk::Align::Start)
-            .build();
-
         let dns_summary_label = gtk::Label::builder()
-            .label("Detecting...")
+            .label("DNS: Detecting...")
             .css_classes(["orbit-status"])
             .halign(gtk::Align::Start)
             .build();
 
-        dns_info.append(&dns_title);
         dns_info.append(&dns_summary_label);
 
         let dns_expand_icon = gtk::Image::builder()
             .icon_name("pan-end-symbolic")
-            .pixel_size(14)
+            .pixel_size(12)
             .css_classes(["orbit-dns-expand-icon"])
             .valign(gtk::Align::Center)
             .build();
@@ -199,7 +193,6 @@ impl VpnList {
         info_grid.append(&dns_section);
         
         dashboard.append(&info_grid);
-        container.append(&dashboard);
 
         // VPN Profiles Section
         let scrolled = gtk::ScrolledWindow::builder()
@@ -209,12 +202,19 @@ impl VpnList {
             .css_classes(["orbit-scrolled"])
             .build();
         
+        let scroll_content = gtk::Box::builder()
+            .orientation(Orientation::Vertical)
+            .spacing(0)
+            .build();
+        
         let list_box = gtk::Box::builder()
             .orientation(Orientation::Vertical)
             .css_classes(["orbit-list"])
             .build();
         
-        scrolled.set_child(Some(&list_box));
+        scroll_content.append(&dashboard);
+        scroll_content.append(&list_box);
+        scrolled.set_child(Some(&scroll_content));
         container.append(&scrolled);
         
         let list = Self {
@@ -278,7 +278,7 @@ impl VpnList {
             format!("Mixed ({})", names)
         };
 
-        self.dns_summary_label.set_label(&summary);
+        self.dns_summary_label.set_label(&format!("DNS: {}", summary));
 
         if any_private {
             self.dns_summary_label.add_css_class("orbit-status-accent");
