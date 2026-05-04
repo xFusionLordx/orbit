@@ -361,6 +361,10 @@ window {{
     border: 1px solid transparent;
 }}
 
+.orbit-button.primary label {{
+    color: {accent_fg};
+}}
+
 .orbit-button.primary:hover {{
     background-color: {accent_hover};
     background-image: none;
@@ -370,6 +374,10 @@ window {{
     min-height: 0;
     min-width: 0;
     outline: none;
+}}
+
+.orbit-button.primary:hover label {{
+    color: {accent_fg};
 }}
 
 /* Destructive Buttons */
@@ -418,10 +426,6 @@ window {{
     color: {fg};
     margin: 20px;
     padding: 24px;
-}}
-
-.orbit-wired-overlay label {{
-    color: {fg};
 }}
 
 .orbit-wired-device-row {{
@@ -585,6 +589,8 @@ entry:focus, password-entry:focus {{
 /* Power toggle switch */
 .orbit-toggle-switch {{
     background-color: rgba(255, 255, 255, 0.12) !important;
+    background-image: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
     border-radius: 9999px;
     min-width: 44px;
     min-height: 24px;
@@ -601,6 +607,12 @@ entry:focus, password-entry:focus {{
 
 .orbit-toggle-switch:checked {{
     background-color: {accent} !important;
+    background-image: none !important;
+    border-color: {accent} !important;
+}}
+
+.orbit-toggle-switch:checked slider {{
+    background-color: {accent_fg} !important;
 }}
 
 .orbit-battery-mini {{

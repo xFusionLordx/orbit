@@ -1418,6 +1418,7 @@ impl OrbitWindow {
                 
                 let auto_switch = gtk::Switch::builder()
                     .active(profile.autoconnect)
+                    .css_classes(["orbit-toggle-switch"])
                     .valign(gtk::Align::Center)
                     .build();
                 
