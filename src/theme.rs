@@ -193,6 +193,12 @@ impl Theme {
 }}
 
 window {{
+    --accent-color: {accent};
+    --accent-bg-color: {accent};
+    --accent-fg-color: {accent_fg};
+    --destructive-color: {destructive};
+    --destructive-bg-color: {destructive};
+    --destructive-fg-color: #ffffff;
     background: none;
     background-color: transparent;
     box-shadow: none;
