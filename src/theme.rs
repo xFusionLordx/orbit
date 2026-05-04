@@ -588,16 +588,16 @@ entry:focus, password-entry:focus {{
 
 /* Power toggle switch */
 .orbit-toggle-switch {{
-    background-color: rgba(255, 255, 255, 0.12) !important;
-    background-image: none !important;
+    background: rgba(255, 255, 255, 0.12) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: none !important;
     border-radius: 9999px;
     min-width: 44px;
     min-height: 24px;
 }}
 
 .orbit-toggle-switch slider {{
-    background-color: #ffffff;
+    background: #ffffff;
     border-radius: 9999px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
     min-width: 18px;
@@ -606,13 +606,13 @@ entry:focus, password-entry:focus {{
 }}
 
 .orbit-toggle-switch:checked {{
-    background-color: {accent} !important;
-    background-image: none !important;
+    background: {accent} !important;
     border-color: {accent} !important;
+    box-shadow: none !important;
 }}
 
 .orbit-toggle-switch:checked slider {{
-    background-color: {accent_fg} !important;
+    background: {accent_fg} !important;
 }}
 
 .orbit-battery-mini {{
