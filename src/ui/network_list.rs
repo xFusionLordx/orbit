@@ -422,6 +422,7 @@ impl NetworkList {
                 .pixel_size(14)
                 .css_classes(["orbit-signal-icon"])
                 .tooltip_text("Secure Network")
+                .valign(gtk::Align::Center)
                 .build();
             actions_box.append(&lock_icon);
         }

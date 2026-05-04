@@ -11,7 +11,7 @@ use super::network_list::NetworkList;
 use super::device_list::DeviceList;
 use super::saved_networks_list::SavedNetworksList;
 use super::vpn_list::VpnList;
-use crate::dbus::network_manager::NetworkDetails;
+use crate::dbus::network_manager::{NetworkDetails, WiredProfile};
 
 pub struct OrbitWindow {
     window: ApplicationWindow,
@@ -53,6 +53,11 @@ pub struct OrbitWindow {
     bt_pin_callback: Rc<RefCell<Option<async_channel::Sender<String>>>>,
     bt_passkey_callback: Rc<RefCell<Option<async_channel::Sender<u32>>>>,
     bt_confirm_callback: Rc<RefCell<Option<async_channel::Sender<bool>>>>,
+    wired_revealer: gtk::Revealer,
+    wired_list_box: gtk::Box,
+    wired_connect_callback: Rc<RefCell<Option<Rc<dyn Fn(String, String)>>>>,
+    wired_disconnect_callback: Rc<RefCell<Option<Rc<dyn Fn(String)>>>>,
+    wired_autoconnect_callback: Rc<RefCell<Option<Rc<dyn Fn(String, bool)>>>>,
     theme: Rc<RefCell<Theme>>,
     css_provider: gtk4::CssProvider,
     user_css_provider: gtk4::CssProvider,
@@ -101,6 +106,11 @@ impl Clone for OrbitWindow {
             bt_pin_callback: self.bt_pin_callback.clone(),
             bt_passkey_callback: self.bt_passkey_callback.clone(),
             bt_confirm_callback: self.bt_confirm_callback.clone(),
+            wired_revealer: self.wired_revealer.clone(),
+            wired_list_box: self.wired_list_box.clone(),
+            wired_connect_callback: self.wired_connect_callback.clone(),
+            wired_disconnect_callback: self.wired_disconnect_callback.clone(),
+            wired_autoconnect_callback: self.wired_autoconnect_callback.clone(),
             theme: self.theme.clone(),
             css_provider: self.css_provider.clone(),
             user_css_provider: self.user_css_provider.clone(),
@@ -389,6 +399,7 @@ impl OrbitWindow {
         let error_icon = gtk::Image::builder()
             .icon_name("dialog-error-symbolic")
             .pixel_size(16)
+            .valign(gtk::Align::Center)
             .build();
             
         let error_title = gtk::Label::builder()
@@ -543,6 +554,62 @@ impl OrbitWindow {
         
         overlay.add_overlay(&bt_agent_revealer);
         
+        let wired_box = gtk::Box::builder()
+            .orientation(Orientation::Vertical)
+            .css_classes(["orbit-wired-overlay"])
+            .spacing(8)
+            .margin_start(16)
+            .margin_end(16)
+            .margin_top(16)
+            .margin_bottom(16)
+            .build();
+        
+        let wired_header_row = gtk::Box::builder()
+            .orientation(Orientation::Horizontal)
+            .spacing(12)
+            .build();
+        
+        let wired_title = gtk::Label::builder()
+            .label("Wired Connections")
+            .css_classes(["orbit-detail-label"])
+            .halign(gtk::Align::Start)
+            .hexpand(true)
+            .build();
+        
+        let wired_close_btn = gtk::Button::builder()
+            .icon_name("window-close-symbolic")
+            .css_classes(["orbit-button", "flat"])
+            .build();
+        
+        wired_header_row.append(&wired_title);
+        wired_header_row.append(&wired_close_btn);
+        
+        wired_box.append(&wired_header_row);
+        
+        let wired_list_box = gtk::Box::builder()
+            .orientation(Orientation::Vertical)
+            .spacing(8)
+            .vexpand(true)
+            .build();
+        
+        wired_box.append(&wired_list_box);
+        
+        let wired_revealer = gtk::Revealer::builder()
+            .child(&wired_box)
+            .reveal_child(false)
+            .transition_type(gtk::RevealerTransitionType::SlideUp)
+            .transition_duration(250)
+            .valign(gtk::Align::End)
+            .can_target(true)
+            .build();
+        
+        overlay.add_overlay(&wired_revealer);
+        
+        let wired_revealer_close = wired_revealer.clone();
+        wired_close_btn.connect_clicked(move |_| {
+            wired_revealer_close.set_reveal_child(false);
+        });
+        
         let root_revealer = gtk::Revealer::builder()
             .transition_type(parse_revealer_transition(&config.borrow().window_transition))
             .transition_duration(config.borrow().window_transition_duration)
@@ -563,6 +630,10 @@ impl OrbitWindow {
         let bt_pin_callback: Rc<RefCell<Option<async_channel::Sender<String>>>> = Rc::new(RefCell::new(None));
         let bt_passkey_callback: Rc<RefCell<Option<async_channel::Sender<u32>>>> = Rc::new(RefCell::new(None));
         let bt_confirm_callback: Rc<RefCell<Option<async_channel::Sender<bool>>>> = Rc::new(RefCell::new(None));
+
+        let wired_connect_callback: Rc<RefCell<Option<Rc<dyn Fn(String, String)>>>> = Rc::new(RefCell::new(None));
+        let wired_disconnect_callback: Rc<RefCell<Option<Rc<dyn Fn(String)>>>> = Rc::new(RefCell::new(None));
+        let wired_autoconnect_callback: Rc<RefCell<Option<Rc<dyn Fn(String, bool)>>>> = Rc::new(RefCell::new(None));
 
         let bt_pin_cb = bt_pin_callback.clone();
         let bt_pass_cb = bt_passkey_callback.clone();
@@ -636,6 +707,11 @@ impl OrbitWindow {
             bt_pin_callback,
             bt_passkey_callback,
             bt_confirm_callback,
+            wired_revealer,
+            wired_list_box,
+            wired_connect_callback,
+            wired_disconnect_callback,
+            wired_autoconnect_callback,
             theme,
             css_provider,
             user_css_provider,
@@ -673,6 +749,10 @@ impl OrbitWindow {
                 }
                 if win_clone.error_revealer.reveals_child() {
                     win_clone.error_revealer.set_reveal_child(false);
+                    return gtk4::glib::Propagation::Stop;
+                }
+                if win_clone.wired_revealer.reveals_child() {
+                    win_clone.wired_revealer.set_reveal_child(false);
                     return gtk4::glib::Propagation::Stop;
                 }
 
@@ -961,6 +1041,7 @@ impl OrbitWindow {
                 .icon_name(icon_name)
                 .pixel_size(16)
                 .css_classes(["orbit-detail-icon"])
+                .valign(gtk::Align::Center)
                 .build();
             
             let label_widget = gtk::Label::builder()
@@ -1028,6 +1109,7 @@ impl OrbitWindow {
                 .icon_name(icon_name)
                 .pixel_size(16)
                 .css_classes(["orbit-detail-icon"])
+                .valign(gtk::Align::Center)
                 .build();
             
             let label_widget = gtk::Label::builder()
@@ -1164,6 +1246,235 @@ impl OrbitWindow {
         self.hidden_revealer.set_reveal_child(false);
         self.error_revealer.set_reveal_child(false);
         self.saved_revealer.set_reveal_child(true);
+    }
+    
+    pub fn show_wired_overlay(&self, profiles: &[WiredProfile]) {
+        self.hide_wired_overlay();
+        
+        while let Some(child) = self.wired_list_box.first_child() {
+            self.wired_list_box.remove(&child);
+        }
+        
+        for profile in profiles {
+            let row = self.create_wired_device_row(profile);
+            self.wired_list_box.append(&row);
+        }
+        
+        self.wired_revealer.set_reveal_child(true);
+    }
+    
+    fn create_wired_device_row(&self, profile: &WiredProfile) -> gtk::Box {
+        let container = gtk::Box::builder()
+            .orientation(Orientation::Vertical)
+            .spacing(4)
+            .css_classes(["orbit-wired-device-row"])
+            .build();
+        
+        let main_row = gtk::Box::builder()
+            .orientation(Orientation::Horizontal)
+            .spacing(12)
+            .build();
+        
+        let icon = gtk::Image::builder()
+            .icon_name(if profile.is_active { "network-wired-symbolic" } else { "network-wired-disconnected-symbolic" })
+            .pixel_size(24)
+            .valign(gtk::Align::Center)
+            .build();
+        if profile.is_active {
+            icon.add_css_class("orbit-icon-accent");
+        }
+        main_row.append(&icon);
+        
+        let info_box = gtk::Box::builder()
+            .orientation(Orientation::Vertical)
+            .spacing(2)
+            .hexpand(true)
+            .valign(gtk::Align::Center)
+            .build();
+        
+        let name_label = gtk::Label::builder()
+            .label(&profile.device_name)
+            .css_classes(["orbit-ssid"])
+            .halign(gtk::Align::Start)
+            .build();
+        info_box.append(&name_label);
+        
+        let status_text = if profile.is_active {
+            if !profile.ip4_address.is_empty() {
+                format!("Connected · {} · {} Mb/s", profile.ip4_address, profile.speed)
+            } else {
+                format!("Connected · {} Mb/s", profile.speed)
+            }
+        } else if profile.has_carrier {
+            "Cable connected · Disconnected".to_string()
+        } else {
+            "No cable detected".to_string()
+        };
+        
+        let status_label = gtk::Label::builder()
+            .label(&status_text)
+            .css_classes(["orbit-status"])
+            .halign(gtk::Align::Start)
+            .build();
+        info_box.append(&status_label);
+        
+        main_row.append(&info_box);
+        
+        if profile.is_active && !profile.connection_path.is_empty() {
+            let disc_btn = gtk::Button::builder()
+                .label("Disconnect")
+                .css_classes(["orbit-button", "flat"])
+                .build();
+            let dev_path = profile.device_path.clone();
+            let cb = self.wired_disconnect_callback.clone();
+            disc_btn.connect_clicked(move |_| {
+                if let Some(ref f) = *cb.borrow() {
+                    f(dev_path.clone());
+                }
+            });
+            main_row.append(&disc_btn);
+        } else if !profile.connection_path.is_empty() {
+            let conn_btn = gtk::Button::builder()
+                .label("Connect")
+                .css_classes(["orbit-button", "flat", "primary"])
+                .build();
+            let conn_path = profile.connection_path.clone();
+            let dev_path = profile.device_path.clone();
+            let cb = self.wired_connect_callback.clone();
+            conn_btn.connect_clicked(move |_| {
+                if let Some(ref f) = *cb.borrow() {
+                    f(conn_path.clone(), dev_path.clone());
+                }
+            });
+            main_row.append(&conn_btn);
+        }
+        
+        container.append(&main_row);
+        
+        // Expandable details section
+        let has_details = profile.is_active || !profile.mac_address.is_empty();
+        
+        if has_details {
+            let details_btn = gtk::Button::builder()
+                .label("Details")
+                .icon_name("pan-end-symbolic")
+                .css_classes(["orbit-button", "flat"])
+                .build();
+            
+            // Build details content
+            let details_box = gtk::Box::builder()
+                .orientation(Orientation::Vertical)
+                .spacing(4)
+                .margin_start(36)
+                .margin_top(4)
+                .build();
+            
+            if !profile.mac_address.is_empty() {
+                let mac_label = gtk::Label::builder()
+                    .label(&format!("MAC: {}", profile.mac_address))
+                    .css_classes(["orbit-status"])
+                    .halign(gtk::Align::Start)
+                    .selectable(true)
+                    .build();
+                details_box.append(&mac_label);
+            }
+            
+            if profile.is_active {
+                if !profile.gateway.is_empty() {
+                    let gw_label = gtk::Label::builder()
+                        .label(&format!("Gateway: {}", profile.gateway))
+                        .css_classes(["orbit-status"])
+                        .halign(gtk::Align::Start)
+                        .selectable(true)
+                        .build();
+                    details_box.append(&gw_label);
+                }
+                
+                if !profile.dns_servers.is_empty() {
+                    let dns_text = profile.dns_servers.join(", ");
+                    let dns_label = gtk::Label::builder()
+                        .label(&format!("DNS: {}", dns_text))
+                        .css_classes(["orbit-status"])
+                        .halign(gtk::Align::Start)
+                        .selectable(true)
+                        .wrap(true)
+                        .build();
+                    details_box.append(&dns_label);
+                }
+            }
+            
+            if !profile.connection_path.is_empty() {
+                let auto_row = gtk::Box::builder()
+                    .orientation(Orientation::Horizontal)
+                    .spacing(8)
+                    .halign(gtk::Align::Start)
+                    .build();
+                
+                let auto_label = gtk::Label::builder()
+                    .label("Auto-connect")
+                    .css_classes(["orbit-status"])
+                    .halign(gtk::Align::Start)
+                    .build();
+                
+                let auto_switch = gtk::Switch::builder()
+                    .active(profile.autoconnect)
+                    .valign(gtk::Align::Center)
+                    .build();
+                
+                auto_row.append(&auto_label);
+                auto_row.append(&auto_switch);
+                details_box.append(&auto_row);
+                
+                let conn_path = profile.connection_path.clone();
+                let auto_cb = self.wired_autoconnect_callback.clone();
+                auto_switch.connect_state_set(move |_, state| {
+                    if let Some(ref f) = *auto_cb.borrow() {
+                        f(conn_path.clone(), state);
+                    }
+                    gtk4::glib::Propagation::Proceed
+                });
+            }
+            
+            let details_revealer = gtk::Revealer::builder()
+                .child(&details_box)
+                .reveal_child(false)
+                .transition_type(gtk::RevealerTransitionType::SlideDown)
+                .transition_duration(200)
+                .build();
+            
+            let details_btn_clone = details_btn.clone();
+            let revealer_clone = details_revealer.clone();
+            details_btn.connect_clicked(move |_| {
+                let expanded = revealer_clone.reveals_child();
+                revealer_clone.set_reveal_child(!expanded);
+                if expanded {
+                    details_btn_clone.set_icon_name("pan-end-symbolic");
+                } else {
+                    details_btn_clone.set_icon_name("pan-down-symbolic");
+                }
+            });
+            
+            container.append(&details_btn);
+            container.append(&details_revealer);
+        }
+        
+        container
+    }
+    
+    pub fn hide_wired_overlay(&self) {
+        self.wired_revealer.set_reveal_child(false);
+    }
+    
+    pub fn set_wired_connect_callback<F: Fn(String, String) + 'static>(&self, callback: F) {
+        *self.wired_connect_callback.borrow_mut() = Some(Rc::new(callback));
+    }
+    
+    pub fn set_wired_disconnect_callback<F: Fn(String) + 'static>(&self, callback: F) {
+        *self.wired_disconnect_callback.borrow_mut() = Some(Rc::new(callback));
+    }
+    
+    pub fn set_wired_autoconnect_callback<F: Fn(String, bool) + 'static>(&self, callback: F) {
+        *self.wired_autoconnect_callback.borrow_mut() = Some(Rc::new(callback));
     }
     
     pub fn window(&self) -> &gtk::ApplicationWindow {

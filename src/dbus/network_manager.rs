@@ -55,6 +55,22 @@ pub struct VpnProfile {
     pub is_external: bool,
 }
 
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct WiredProfile {
+    pub name: String,
+    pub device_name: String,
+    pub device_path: String,
+    pub connection_path: String,
+    pub is_active: bool,
+    pub has_carrier: bool,
+    pub speed: u32,
+    pub mac_address: String,
+    pub ip4_address: String,
+    pub gateway: String,
+    pub dns_servers: Vec<String>,
+    pub autoconnect: bool,
+}
+
 impl NetworkManager {
     pub async fn new() -> zbus::Result<Self> {
         let conn = Connection::system().await?;
@@ -895,6 +911,10 @@ impl NetworkManager {
 
         let path_obj = zbus::zvariant::ObjectPath::try_from(path)
             .map_err(|e| zbus::Error::Variant(e))?;
+        let device = zbus::zvariant::ObjectPath::try_from("/")
+            .map_err(|e| zbus::Error::Variant(e))?;
+        let specific = zbus::zvariant::ObjectPath::try_from("/")
+            .map_err(|e| zbus::Error::Variant(e))?;
         
         self.conn
             .call_method(
@@ -902,7 +922,7 @@ impl NetworkManager {
                 "/org/freedesktop/NetworkManager",
                 Some("org.freedesktop.NetworkManager"),
                 "ActivateConnection",
-                &(&path_obj, "/", "/"),
+                &(&path_obj, &device, &specific),
             )
             .await?;
         Ok(())
@@ -965,6 +985,378 @@ impl NetworkManager {
         Ok(())
     }
 
+    pub async fn get_wired_devices(&self) -> zbus::Result<Vec<String>> {
+        let devices: Vec<zbus::zvariant::OwnedObjectPath> = self.conn
+            .call_method(
+                Some("org.freedesktop.NetworkManager"),
+                "/org/freedesktop/NetworkManager",
+                Some("org.freedesktop.NetworkManager"),
+                "GetDevices",
+                &(),
+            )
+            .await?
+            .body()
+            .deserialize()?;
+        
+        let mut wired = Vec::new();
+        
+        for device_path in devices {
+            let dtype_reply = self.conn
+                .call_method(
+                    Some("org.freedesktop.NetworkManager"),
+                    &device_path,
+                    Some("org.freedesktop.DBus.Properties"),
+                    "Get",
+                    &("org.freedesktop.NetworkManager.Device", "DeviceType"),
+                )
+                .await?
+                .body()
+                .deserialize::<zbus::zvariant::OwnedValue>()?;
+            
+            let device_type: u32 = match u32::try_from(zbus::zvariant::Value::from(dtype_reply)) {
+                Ok(t) => t,
+                Err(_) => 0,
+            };
+            
+            if device_type == 1 {
+                wired.push(device_path.to_string());
+            }
+        }
+        
+        Ok(wired)
+    }
+    
+    async fn get_wired_device_property(&self, device_path: &str, property: &str) -> zbus::Result<zbus::zvariant::OwnedValue> {
+        let path: zbus::zvariant::ObjectPath = device_path.try_into()
+            .map_err(|e: zbus::zvariant::Error| zbus::Error::Variant(e))?;
+        let reply = self.conn
+            .call_method(
+                Some("org.freedesktop.NetworkManager"),
+                &path,
+                Some("org.freedesktop.DBus.Properties"),
+                "Get",
+                &("org.freedesktop.NetworkManager.Device", property),
+            )
+            .await?
+            .body()
+            .deserialize::<zbus::zvariant::OwnedValue>()?;
+        
+        Ok(reply)
+    }
+    
+    pub async fn get_wired_profiles(&self) -> zbus::Result<Vec<WiredProfile>> {
+        let devices = self.get_wired_devices().await?;
+        let mut profiles = Vec::new();
+        
+        for device_path in devices {
+            let iface = self.get_wired_device_property(&device_path, "Interface").await
+                .ok()
+                .and_then(|v| String::try_from(zbus::zvariant::Value::from(v)).ok())
+                .unwrap_or_else(|| "Unknown".to_string());
+            
+            let carrier = self.get_wired_device_property(&device_path, "Carrier").await
+                .ok()
+                .and_then(|v| bool::try_from(zbus::zvariant::Value::from(v)).ok())
+                .unwrap_or(false);
+            
+            let speed = self.get_wired_device_property(&device_path, "Speed").await
+                .ok()
+                .and_then(|v| u32::try_from(zbus::zvariant::Value::from(v)).ok())
+                .unwrap_or(0);
+            
+            let hw = self.get_wired_device_property(&device_path, "HwAddress").await
+                .ok()
+                .and_then(|v| String::try_from(zbus::zvariant::Value::from(v)).ok())
+                .unwrap_or_default();
+            
+            let active_conn_path = self.get_wired_device_property(&device_path, "ActiveConnection").await
+                .ok()
+                .and_then(|v| {
+                    let val = zbus::zvariant::Value::from(v);
+                    zbus::zvariant::OwnedObjectPath::try_from(val).ok()
+                });
+            
+            let mut name = iface.clone();
+            let mut connection_path = String::new();
+            let mut autoconnect = true;
+            let mut is_active = false;
+            let mut ip4_address = String::new();
+            let mut gateway = String::new();
+            let mut dns_servers = Vec::new();
+            
+            if let Some(ref active_path) = active_conn_path {
+                if active_path.as_str() != "/" {
+                    is_active = true;
+                    
+                    if let Ok(id_val) = self.conn
+                        .call_method(
+                            Some("org.freedesktop.NetworkManager"),
+                            active_path,
+                            Some("org.freedesktop.DBus.Properties"),
+                            "Get",
+                            &("org.freedesktop.NetworkManager.Connection.Active", "Id"),
+                        )
+                        .await
+                    {
+                        if let Ok(v) = id_val.body().deserialize::<zbus::zvariant::OwnedValue>() {
+                            name = String::try_from(zbus::zvariant::Value::from(v)).unwrap_or(name);
+                        }
+                    }
+                    
+                    if let Ok(conn_val) = self.conn
+                        .call_method(
+                            Some("org.freedesktop.NetworkManager"),
+                            active_path,
+                            Some("org.freedesktop.DBus.Properties"),
+                            "Get",
+                            &("org.freedesktop.NetworkManager.Connection.Active", "Connection"),
+                        )
+                        .await
+                    {
+                        if let Ok(v) = conn_val.body().deserialize::<zbus::zvariant::OwnedValue>() {
+                            let cp = zbus::zvariant::OwnedObjectPath::try_from(zbus::zvariant::Value::from(v))
+                                .unwrap_or_else(|_| "/".try_into().unwrap());
+                            connection_path = cp.to_string();
+                        }
+                    }
+                    
+                    if let Ok(ip4_val) = self.conn
+                        .call_method(
+                            Some("org.freedesktop.NetworkManager"),
+                            active_path,
+                            Some("org.freedesktop.DBus.Properties"),
+                            "Get",
+                            &("org.freedesktop.NetworkManager.Connection.Active", "Ip4Config"),
+                        )
+                        .await
+                    {
+                        if let Ok(v) = ip4_val.body().deserialize::<zbus::zvariant::OwnedValue>() {
+                            let ip4_path = zbus::zvariant::OwnedObjectPath::try_from(zbus::zvariant::Value::from(v))
+                                .unwrap_or_else(|_| "/".try_into().unwrap());
+                            
+                            if ip4_path.as_str() != "/" {
+                                if let Ok(addr_val) = self.conn
+                                    .call_method(
+                                        Some("org.freedesktop.NetworkManager"),
+                                        &ip4_path,
+                                        Some("org.freedesktop.DBus.Properties"),
+                                        "Get",
+                                        &("org.freedesktop.NetworkManager.IP4Config", "AddressData"),
+                                    )
+                                    .await
+                                {
+                                    if let Ok(v) = addr_val.body().deserialize::<zbus::zvariant::OwnedValue>() {
+                                        let val: zbus::zvariant::Value = v.into();
+                                        if let zbus::zvariant::Value::Array(a) = val {
+                                            for iv in a.iter() {
+                                                let owned = zbus::zvariant::OwnedValue::try_from(iv)
+                                                    .expect("Value should be convertible to OwnedValue");
+                                                if let Ok(map) = HashMap::<String, zbus::zvariant::OwnedValue>::try_from(owned) {
+                                                    if let Some(addr_v) = map.get("address") {
+                                                        if let Ok(addr_str) = <&str>::try_from(&**addr_v) {
+                                                            ip4_address = addr_str.to_string();
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                if let Ok(gw_val) = self.conn
+                                    .call_method(
+                                        Some("org.freedesktop.NetworkManager"),
+                                        &ip4_path,
+                                        Some("org.freedesktop.DBus.Properties"),
+                                        "Get",
+                                        &("org.freedesktop.NetworkManager.IP4Config", "Gateway"),
+                                    )
+                                    .await
+                                {
+                                    if let Ok(v) = gw_val.body().deserialize::<zbus::zvariant::OwnedValue>() {
+                                        gateway = String::try_from(zbus::zvariant::Value::from(v)).unwrap_or_default();
+                                    }
+                                }
+                                
+                                if let Ok(dns_val) = self.conn
+                                    .call_method(
+                                        Some("org.freedesktop.NetworkManager"),
+                                        &ip4_path,
+                                        Some("org.freedesktop.DBus.Properties"),
+                                        "Get",
+                                        &("org.freedesktop.NetworkManager.IP4Config", "NameserverData"),
+                                    )
+                                    .await
+                                {
+                                    if let Ok(v) = dns_val.body().deserialize::<zbus::zvariant::OwnedValue>() {
+                                        let dns_val: zbus::zvariant::Value = v.into();
+                                        if let zbus::zvariant::Value::Array(a) = dns_val {
+                                            for iv in a.iter() {
+                                                let owned = zbus::zvariant::OwnedValue::try_from(iv)
+                                                    .expect("Value should be convertible to OwnedValue");
+                                                if let Ok(map) = HashMap::<String, zbus::zvariant::OwnedValue>::try_from(owned) {
+                                                    if let Some(addr_v) = map.get("address") {
+                                                        if let Ok(addr_str) = <&str>::try_from(&**addr_v) {
+                                                            dns_servers.push(addr_str.to_string());
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if connection_path.is_empty() {
+                if let Ok(reply) = self.conn
+                    .call_method(
+                        Some("org.freedesktop.NetworkManager"),
+                        "/org/freedesktop/NetworkManager/Settings",
+                        Some("org.freedesktop.NetworkManager.Settings"),
+                        "ListConnections",
+                        &(),
+                    )
+                    .await
+                {
+                    if let Ok(paths) = reply.body().deserialize::<Vec<zbus::zvariant::OwnedObjectPath>>() {
+                        for conn_path in paths {
+                            if let Ok(props) = self.get_connection_settings_raw(&conn_path).await {
+                                if let Some(conn) = props.get("connection") {
+                                    let is_ethernet = conn.get("type")
+                                        .and_then(|v| {
+                                            let val = zbus::zvariant::Value::try_from(v).ok()?;
+                                            <&str>::try_from(&val).map(|s| s == "802-3-ethernet").ok()
+                                        })
+                                        .unwrap_or(false);
+                                    
+                                    if is_ethernet {
+                                        let matches_device = if let Some(conn_section) = props.get("connection") {
+                                            conn_section.get("interface-name")
+                                                .and_then(|v| {
+                                                    let val = zbus::zvariant::Value::try_from(v).ok()?;
+                                                    <&str>::try_from(&val).ok().map(|s: &str| s == iface.as_str())
+                                                })
+                                                .unwrap_or(false)
+                                        } else {
+                                            false
+                                        };
+                                        
+                                        if matches_device {
+                                            connection_path = conn_path.to_string();
+                                            name = conn.get("id")
+                                                .and_then(|v| {
+                                                    let val = zbus::zvariant::Value::try_from(v).ok()?;
+                                                    match val {
+                                                        zbus::zvariant::Value::Str(s) => Some(s.to_string()),
+                                                        _ => None,
+                                                    }
+                                                })
+                                                .unwrap_or(name);
+                                            autoconnect = conn.get("autoconnect")
+                                                .and_then(|v| {
+                                                    let val = zbus::zvariant::Value::try_from(v).ok()?;
+                                                    bool::try_from(val).ok()
+                                                })
+                                                .unwrap_or(true);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                if let Ok(conn_path_obj) = zbus::zvariant::OwnedObjectPath::try_from(connection_path.as_str()) {
+                    if let Ok(props) = self.get_connection_settings_raw(&conn_path_obj).await {
+                        if let Some(conn) = props.get("connection") {
+                            autoconnect = conn.get("autoconnect")
+                                .and_then(|v| {
+                                    let val = zbus::zvariant::Value::try_from(v).ok()?;
+                                    bool::try_from(val).ok()
+                                })
+                                .unwrap_or(true);
+                        }
+                    }
+                }
+            }
+            
+            profiles.push(WiredProfile {
+                name,
+                device_name: iface,
+                device_path,
+                connection_path,
+                is_active,
+                has_carrier: carrier,
+                speed,
+                mac_address: hw,
+                ip4_address,
+                gateway,
+                dns_servers,
+                autoconnect,
+            });
+        }
+        
+        Ok(profiles)
+    }
+    
+    pub async fn activate_wired_connection(&self, connection_path: &str, device_path: &str) -> zbus::Result<()> {
+        let path_obj = zbus::zvariant::ObjectPath::try_from(connection_path)
+            .map_err(|e| zbus::Error::Variant(e))?;
+        let device = zbus::zvariant::ObjectPath::try_from(device_path)
+            .map_err(|e| zbus::Error::Variant(e))?;
+        let specific = zbus::zvariant::ObjectPath::try_from("/")
+            .map_err(|e| zbus::Error::Variant(e))?;
+        
+        self.conn
+            .call_method(
+                Some("org.freedesktop.NetworkManager"),
+                "/org/freedesktop/NetworkManager",
+                Some("org.freedesktop.NetworkManager"),
+                "ActivateConnection",
+                &(&path_obj, &device, &specific),
+            )
+            .await?;
+        Ok(())
+    }
+    
+    pub async fn deactivate_wired_connection(&self, device_path: &str) -> zbus::Result<()> {
+        let device_path_obj: zbus::zvariant::ObjectPath = device_path.try_into()
+            .map_err(|e: zbus::zvariant::Error| zbus::Error::Variant(e))?;
+        
+        let active_conn = self.conn
+            .call_method(
+                Some("org.freedesktop.NetworkManager"),
+                &device_path_obj,
+                Some("org.freedesktop.DBus.Properties"),
+                "Get",
+                &("org.freedesktop.NetworkManager.Device", "ActiveConnection"),
+            )
+            .await?
+            .body()
+            .deserialize::<zbus::zvariant::OwnedValue>()?;
+        
+        let active_path = zbus::zvariant::OwnedObjectPath::try_from(zbus::zvariant::Value::from(active_conn))
+            .unwrap_or_else(|_| "/".try_into().unwrap());
+        
+        if active_path.as_str() != "/" {
+            self.conn
+                .call_method(
+                    Some("org.freedesktop.NetworkManager"),
+                    "/org/freedesktop/NetworkManager",
+                    Some("org.freedesktop.NetworkManager"),
+                    "DeactivateConnection",
+                    &(&active_path),
+                )
+                .await?;
+        }
+        Ok(())
+    }
+    
     pub async fn set_autoconnect(&self, path: &str, autoconnect: bool) -> zbus::Result<()> {
         let path_obj: zbus::zvariant::ObjectPath = path.try_into()
             .map_err(|e: zbus::zvariant::Error| zbus::Error::Variant(e))?;

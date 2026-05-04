@@ -305,6 +305,7 @@ impl DeviceList {
                 .icon_name(battery_icon_name)
                 .pixel_size(10)
                 .css_classes(bat_classes.clone())
+                .valign(gtk::Align::Center)
                 .build();
             
             let battery_label = gtk::Label::builder()

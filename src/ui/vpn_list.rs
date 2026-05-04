@@ -87,6 +87,7 @@ impl VpnList {
             .icon_name("network-vpn-symbolic")
             .pixel_size(24)
             .css_classes(["orbit-icon-accent"])
+            .valign(gtk::Align::Center)
             .build();
         
         let ip_info = gtk::Box::builder()
@@ -122,12 +123,14 @@ impl VpnList {
         let dns_header_row = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(12)
+            .css_classes(["orbit-dns-header"])
             .build();
 
         let dns_icon = gtk::Image::builder()
             .icon_name("web-browser-symbolic")
             .pixel_size(24)
             .css_classes(["orbit-signal-icon"])
+            .valign(gtk::Align::Center)
             .build();
         
         let dns_info = gtk::Box::builder()

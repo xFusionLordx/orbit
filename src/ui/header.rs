@@ -13,6 +13,7 @@ pub struct Header {
     wifi_tab: gtk::Button,
     bluetooth_tab: gtk::Button,
     vpn_tab: gtk::Button,
+    wired_button: gtk::Button,
     power_switch: gtk::Switch,
     power_box: gtk::Box,
     power_label: gtk::Label,
@@ -75,9 +76,17 @@ impl Header {
         power_box.append(&power_label);
         power_box.append(&power_switch);
         
+        let wired_button = gtk::Button::builder()
+            .icon_name("network-wired-symbolic")
+            .css_classes(["orbit-button", "flat", "orbit-wired-button"])
+            .tooltip_text("Wired Connections")
+            .valign(gtk::Align::Center)
+            .build();
+        
         title_row.append(&logo_container);
         title_row.append(&title);
         title_row.append(&power_box);
+        title_row.append(&wired_button);
         
         let tab_bar = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
@@ -115,6 +124,7 @@ impl Header {
             wifi_tab,
             bluetooth_tab,
             vpn_tab,
+            wired_button,
             power_switch,
             power_box,
             power_label,
@@ -153,6 +163,10 @@ impl Header {
         &self.vpn_tab
     }
 
+    pub fn wired_button(&self) -> &gtk::Button {
+        &self.wired_button
+    }
+
     pub fn set_tab(&self, tab: &str) {
         self.wifi_tab.remove_css_class("active");
         self.bluetooth_tab.remove_css_class("active");
@@ -163,15 +177,18 @@ impl Header {
                 self.wifi_tab.add_css_class("active");
                 self.power_box.set_visible(true);
                 self.power_label.set_label("WiFi");
+                self.wired_button.set_visible(true);
             }
             "bluetooth" => {
                 self.bluetooth_tab.add_css_class("active");
                 self.power_box.set_visible(true);
                 self.power_label.set_label("Bluetooth");
+                self.wired_button.set_visible(false);
             }
             "vpn" => {
                 self.vpn_tab.add_css_class("active");
                 self.power_box.set_visible(false);
+                self.wired_button.set_visible(false);
             }
             _ => {}
         }

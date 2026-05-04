@@ -4,6 +4,7 @@ use serde::Deserialize;
 struct ThemeFile {
     accent_primary: Option<String>,
     accent_secondary: Option<String>,
+    accent_primary_foreground: Option<String>,
     background: Option<String>,
     foreground: Option<String>,
     destructive: Option<String>,
@@ -14,6 +15,7 @@ struct ThemeFile {
 pub struct Theme {
     pub accent_primary: String,
     pub accent_secondary: String,
+    pub accent_primary_foreground: String,
     pub background: String,
     pub foreground: String,
     pub destructive: String,
@@ -22,9 +24,12 @@ pub struct Theme {
 
 impl Default for Theme {
     fn default() -> Self {
+        let default_accent = "#8b5cf6".to_string();
+        let default_fg = Self::compute_accent_foreground(&default_accent);
         Theme {
-            accent_primary: "#8b5cf6".to_string(),
+            accent_primary: default_accent,
             accent_secondary: "#06b6d4".to_string(),
+            accent_primary_foreground: default_fg,
             background: "#1e1e2e".to_string(),
             foreground: "#d4d4d8".to_string(),
             destructive: "#ef4444".to_string(),
@@ -46,7 +51,11 @@ impl Theme {
                     match toml::from_str::<ThemeFile>(&content) {
                         Ok(theme_file) => {
                             let mut theme = Self::default();
-                            if let Some(c) = theme_file.accent_primary { theme.accent_primary = c; }
+                            if let Some(c) = theme_file.accent_primary { 
+                                theme.accent_primary_foreground = Self::compute_accent_foreground(&c);
+                                theme.accent_primary = c; 
+                            }
+                            if let Some(c) = theme_file.accent_primary_foreground { theme.accent_primary_foreground = c; }
                             if let Some(c) = theme_file.accent_secondary { theme.accent_secondary = c; }
                             if let Some(c) = theme_file.background { theme.background = c; }
                             if let Some(c) = theme_file.foreground { theme.foreground = c; }
@@ -100,6 +109,22 @@ impl Theme {
         (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32) / 255.0
     }
 
+    fn compute_accent_foreground(accent: &str) -> String {
+        let hex = accent.trim_start_matches('#');
+        if hex.len() != 6 {
+            return "#ffffff".to_string();
+        }
+        let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0);
+        let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0);
+        let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0);
+        let lum = (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32) / 255.0;
+        if lum < 0.5 {
+            "#ffffff".to_string()
+        } else {
+            "#1a1a1a".to_string()
+        }
+    }
+
     fn adjust_color(&self, hex: &str, factor: f32) -> String {
         let (r, g, b) = self.hex_to_rgb(hex);
         let is_light = self.get_luminance(hex) > 0.5;
@@ -120,6 +145,7 @@ impl Theme {
     
     pub fn generate_css(&self) -> String {
         let accent = &self.accent_primary;
+        let accent_fg = &self.accent_primary_foreground;
         let gold = &self.accent_secondary;
         let bg = &self.background;
         let fg = &self.foreground;
@@ -215,7 +241,7 @@ window {{
 
 .orbit-tab:hover {{
     opacity: 1.0;
-    color: #ffffff;
+    color: {accent_fg};
     background-color: {accent};
     background-image: none;
     border-radius: 9999px;
@@ -226,7 +252,7 @@ window {{
     background-color: {accent};
     background-image: none;
     border-radius: 9999px;
-    color: #ffffff;
+    color: {accent_fg};
     opacity: 1.0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }}
@@ -319,7 +345,7 @@ window {{
     background-color: {accent};
     background-image: none;
     border-color: {accent};
-    color: #ffffff;
+    color: {accent_fg};
     box-shadow: 0 0 12px rgba(0, 0, 0, 0.3);
     padding: 8px 18px;
     min-height: 0;
@@ -330,7 +356,7 @@ window {{
 .orbit-button.primary {{
     background-color: {accent};
     background-image: none;
-    color: #ffffff;
+    color: {accent_fg};
     box-shadow: 0 4px 12px {separator};
     border: 1px solid transparent;
 }}
@@ -338,7 +364,7 @@ window {{
 .orbit-button.primary:hover {{
     background-color: {accent_hover};
     background-image: none;
-    color: #ffffff;
+    color: {accent_fg};
     box-shadow: 0 6px 16px {separator};
     padding: 8px 18px;
     min-height: 0;
@@ -381,6 +407,40 @@ window {{
 /* VPN Dashboard */
 .orbit-vpn-dashboard {{
     padding: 4px 0;
+}}
+
+/* Wired Overlay */
+.orbit-wired-overlay {{
+    background-color: {opaque_bg};
+    border: 2px solid {accent};
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    color: {fg};
+    margin: 20px;
+    padding: 24px;
+}}
+
+.orbit-wired-overlay label {{
+    color: {fg};
+}}
+
+.orbit-wired-device-row {{
+    background-color: {card_bg};
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin: 4px 0;
+}}
+
+.orbit-wired-button {{
+    color: {fg};
+    opacity: 0.6;
+    transition: opacity 0.2s ease, color 0.2s ease;
+}}
+
+.orbit-wired-button:hover {{
+    opacity: 1.0;
+    color: {accent};
 }}
 
 /* Footer */
@@ -526,6 +586,17 @@ entry:focus, password-entry:focus {{
 .orbit-toggle-switch {{
     background-color: rgba(255, 255, 255, 0.12) !important;
     border-radius: 9999px;
+    min-width: 44px;
+    min-height: 24px;
+}}
+
+.orbit-toggle-switch slider {{
+    background-color: #ffffff;
+    border-radius: 9999px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    min-width: 18px;
+    min-height: 18px;
+    margin: 3px;
 }}
 
 .orbit-toggle-switch:checked {{
@@ -572,8 +643,21 @@ entry:focus, password-entry:focus {{
 .orbit-dns-detail {{
     font-size: 10px;
     color: {fg};
-    opacity: 0.5;
+    opacity: 0.75;
     font-family: monospace;
+}}
+
+.orbit-dns-header {{
+    background-color: {card_bg};
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 10px 14px;
+    transition: background-color 0.25s ease, border-color 0.25s ease;
+}}
+
+.orbit-dns-header:hover {{
+    background-color: {card_hover_bg};
+    border-color: {accent};
 }}
 
 .orbit-dns-expand-icon {{
@@ -590,6 +674,7 @@ entry:focus, password-entry:focus {{
             separator = separator,
             connected_hover_separator = connected_hover_separator,
             accent = accent,
+            accent_fg = accent_fg,
             accent_hover = accent_hover,
             gold = gold,
             fg = fg,

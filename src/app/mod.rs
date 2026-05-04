@@ -10,7 +10,7 @@ pub mod daemon;
 use crate::config::Config;
 use crate::theme::Theme;
 use crate::dbus::{NetworkManager, BluetoothManager};
-use crate::dbus::network_manager::{AccessPoint, SecurityType, SavedNetwork, NetworkDetails, VpnProfile};
+use crate::dbus::network_manager::{AccessPoint, SecurityType, SavedNetwork, NetworkDetails, VpnProfile, WiredProfile};
 use crate::dbus::bluez::{BluetoothDevice, BluetoothDeviceDetails};
 use crate::ui::{OrbitWindow, DeviceAction};
 use daemon::{DaemonServer, DaemonCommand};
@@ -39,6 +39,7 @@ pub enum AppEvent {
     BtAuthRequest(String, async_channel::Sender<bool>),
     BtAgentCancel,
     VpnProfilesResult(Vec<VpnProfile>),
+    WiredProfilesResult(Vec<WiredProfile>),
     PublicIpResult(String, String, Vec<String>, bool),
     Error(String),
     Notify(String),
@@ -442,6 +443,9 @@ fn setup_events_receiver(
                 AppEvent::VpnProfilesResult(profiles) => {
                     win.vpn_list().set_profiles(profiles);
                 }
+                AppEvent::WiredProfilesResult(profiles) => {
+                    win.show_wired_overlay(&profiles);
+                }
                 AppEvent::PublicIpResult(ip, isp, dns_servers, is_secure) => {
                     log::info!("App: Updating UI with IP: {}, ISP: {}, DNS: {:?}", ip, isp, dns_servers);
                     win.vpn_list().set_privacy_info(&ip, &isp, &dns_servers, is_secure);
@@ -839,6 +843,32 @@ fn setup_ui_callbacks(
                 current_dns,
                 false
             ));
+        });
+    });
+
+    let _win_wired_btn = win.clone();
+    let nm_wired_btn = nm.clone();
+    let rt_wired_btn = rt.clone();
+    let tx_wired_btn = tx.clone();
+    header.wired_button().connect_clicked(move |_| {
+        log::info!("UI: Wired button clicked");
+        let nm = nm_wired_btn.clone();
+        let rt = rt_wired_btn.clone();
+        let tx = tx_wired_btn.clone();
+        std::thread::spawn(move || {
+            let nm_guard = nm.lock().unwrap();
+            if let Some(ref nm_inst) = *nm_guard {
+                match rt.block_on(async { nm_inst.get_wired_profiles().await }) {
+                    Ok(profiles) => {
+                        log::info!("App: Found {} wired profiles", profiles.len());
+                        let _ = tx.send_blocking(AppEvent::WiredProfilesResult(profiles));
+                    }
+                    Err(e) => {
+                        log::error!("App: Failed to fetch wired profiles: {}", e);
+                        let _ = tx.send_blocking(AppEvent::Error(format!("Failed to fetch wired profiles: {}", e)));
+                    }
+                }
+            }
         });
     });
 
@@ -1251,6 +1281,71 @@ fn setup_ui_callbacks(
                 std::thread::sleep(std::time::Duration::from_millis(500));
                 if let Ok(profiles) = rt.block_on(async { nm_inst.get_vpn_profiles().await }) {
                     let _ = tx.send_blocking(AppEvent::VpnProfilesResult(profiles));
+                }
+            }
+        });
+    });
+    
+    let _win_wired_conn = win.clone();
+    let nm_wired_conn = nm.clone();
+    let rt_wired_conn = rt.clone();
+    let tx_wired_conn = tx.clone();
+    win.set_wired_connect_callback(move |conn_path, dev_path| {
+        let nm = nm_wired_conn.clone();
+        let rt = rt_wired_conn.clone();
+        let tx = tx_wired_conn.clone();
+        std::thread::spawn(move || {
+            let nm_guard = nm.lock().unwrap();
+            if let Some(ref nm_inst) = *nm_guard {
+                if let Err(e) = rt.block_on(async { nm_inst.activate_wired_connection(&conn_path, &dev_path).await }) {
+                    let _ = tx.send_blocking(AppEvent::Error(format!("Failed to connect wired: {}", e)));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                if let Ok(profiles) = rt.block_on(async { nm_inst.get_wired_profiles().await }) {
+                    let _ = tx.send_blocking(AppEvent::WiredProfilesResult(profiles));
+                }
+            }
+        });
+    });
+    
+    let _win_wired_disc = win.clone();
+    let nm_wired_disc = nm.clone();
+    let rt_wired_disc = rt.clone();
+    let tx_wired_disc = tx.clone();
+    win.set_wired_disconnect_callback(move |dev_path| {
+        let nm = nm_wired_disc.clone();
+        let rt = rt_wired_disc.clone();
+        let tx = tx_wired_disc.clone();
+        std::thread::spawn(move || {
+            let nm_guard = nm.lock().unwrap();
+            if let Some(ref nm_inst) = *nm_guard {
+                if let Err(e) = rt.block_on(async { nm_inst.deactivate_wired_connection(&dev_path).await }) {
+                    let _ = tx.send_blocking(AppEvent::Error(format!("Failed to disconnect wired: {}", e)));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                if let Ok(profiles) = rt.block_on(async { nm_inst.get_wired_profiles().await }) {
+                    let _ = tx.send_blocking(AppEvent::WiredProfilesResult(profiles));
+                }
+            }
+        });
+    });
+    
+    let _win_wired_auto = win.clone();
+    let nm_wired_auto = nm.clone();
+    let rt_wired_auto = rt.clone();
+    let tx_wired_auto = tx.clone();
+    win.set_wired_autoconnect_callback(move |conn_path, enabled| {
+        let nm = nm_wired_auto.clone();
+        let rt = rt_wired_auto.clone();
+        let tx = tx_wired_auto.clone();
+        std::thread::spawn(move || {
+            let nm_guard = nm.lock().unwrap();
+            if let Some(ref nm_inst) = *nm_guard {
+                if let Err(e) = rt.block_on(async { nm_inst.set_autoconnect(&conn_path, enabled).await }) {
+                    let _ = tx.send_blocking(AppEvent::Error(format!("Failed to set autoconnect: {}", e)));
+                }
+                if let Ok(profiles) = rt.block_on(async { nm_inst.get_wired_profiles().await }) {
+                    let _ = tx.send_blocking(AppEvent::WiredProfilesResult(profiles));
                 }
             }
         });

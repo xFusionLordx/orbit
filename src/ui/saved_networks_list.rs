@@ -157,6 +157,7 @@ impl SavedNetworksList {
                 .icon_name("network-wireless-symbolic")
                 .pixel_size(16)
                 .css_classes(["orbit-icon-accent"])
+                .valign(gtk::Align::Center)
                 .build();
             icon_container.append(&wifi_icon);
             row.append(&icon_container);
@@ -165,6 +166,7 @@ impl SavedNetworksList {
                 .icon_name("network-wireless-symbolic")
                 .pixel_size(16)
                 .css_classes(["orbit-signal-icon"])
+                .valign(gtk::Align::Center)
                 .build();
             row.append(&wifi_icon);
         }
