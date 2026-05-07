@@ -1,11 +1,11 @@
-# Orbit - WiFi/Bluetooth/VPN Manager for Wayland
+# Orbit - WiFi / Bluetooth / VPN / Ethernet Manager for Wayland
 
-A native network manager for Wayland using Rust, GTK4, and layer-shell with a high-contrast glassmorphism UI.
+A native network manager for Wayland using Rust, GTK4, and layer-shell with a high-contrast glassmorphism UI. Manage WiFi, Bluetooth devices, VPN profiles, and wired Ethernet connections from a unified panel.
 
 ## Interface Preview
 
 <p align="center">
-  <img src="screenshots/orbit_demo.gif" width="800" alt="Orbit Main Interface">
+  <img src="screenshots/orbit_wifi.gif" width="800" alt="Orbit WiFi Tab">
 </p>
 
 ## Features
@@ -14,9 +14,14 @@ A native network manager for Wayland using Rust, GTK4, and layer-shell with a hi
   - **Smart Search**: Real-time filtering that prioritizes start-of-word matches.
   - Scan and list available networks with GTK signal strength icons.
   - Connect to open and secured networks (WPA2/WPA3 support).
+  - **Hidden Networks**: Connect to hidden SSIDs with optional password via a dedicated overlay.
+  - **Captive Portal Detection**: Automatically detects captive portals and opens the login page.
   - Disconnect from active networks.
   - **Integrated Saved Networks**: Manage autoconnect and forget profiles via a sleek footer overlay.
   - Detailed network information (IPv4/IPv6, Gateway, DNS, MAC, Speed).
+- **Ethernet Management**
+  - List wired connections with device details.
+  - Connect, disconnect, and toggle autoconnect from a seamless overlay.
 - **Bluetooth Management**
   - **Device Details**: Show MAC address, trust status, and signal strength (RSSI).
   - **Battery & Charging**: Real-time battery levels with low-battery alerts and charging indicators.
@@ -24,13 +29,14 @@ A native network manager for Wayland using Rust, GTK4, and layer-shell with a hi
   - Scan, pair, connect, disconnect, and remove/forget devices.
 - **VPN & Privacy Dashboard**
   - **Privacy Dashboard**: Real-time Public IP and ISP detection.
-  - **DNS Identification**: Automatically identifies DNS providers (Local Router, Cloudflare, Google, etc.).
+  - **DNS Identification**: Automatically identifies DNS providers (Local Router, Cloudflare, Google, etc.) with expandable server details.
   - **Unified VPN Control**: Manage NetworkManager profiles and external apps (Riseup, Tailscale, Mullvad).
 - **Modern UI/UX**
   - **High-Contrast Glassmorphism**: High-quality translucent panels with customizable opacity.
   - **Smooth Transitions**: Animated slide-up overlays for passwords, details, and errors.
   - **Dynamic Positioning**: Anchor to any corner or center edge via CLI.
   - **Keyboard Friendly**: `Escape` key support to close overlays or hide the window.
+  - **Custom CSS**: Override default styling with `~/.config/orbit/style.css`.
 - **Theme Synchronization**
   - **Hot-Reloading**: Change colors in real-time without restarting the application.
   - Automatically syncs with system background, foreground, and accent colors.
@@ -68,7 +74,7 @@ cargo build --release
 sudo install -Dm755 target/release/orbit /usr/bin/orbit
 # Install systemd service
 mkdir -p ~/.config/systemd/user/
-cp aur/orbit.service ~/.config/systemd/user/
+cp orbit.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now orbit
 ```
@@ -149,8 +155,19 @@ accent_primary = "#8b5cf6"
 accent_secondary = "#06b6d4"
 background = "#1e1e2e"
 foreground = "#d4d4d8"
+destructive = "#ef4444"
 opacity = 0.91
 ```
+
+`accent_primary_foreground` is computed automatically (white on dark accents, dark on light accents), but can be overridden:
+
+```toml
+accent_primary_foreground = "#ffffff"
+```
+
+### Custom Style Override (`~/.config/orbit/style.css`)
+
+Drop a custom `style.css` in the config directory to override or extend the generated theme. GTK4 CSS classes include `.orbit-panel`, `.orbit-network-row`, `.orbit-button`, `.orbit-tab`, and more. This file is loaded after the dynamic theme and takes precedence.
 
 ## License
 
