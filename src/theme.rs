@@ -414,7 +414,7 @@ window {{
     letter-spacing: 0.15em;
     color: {gold};
     font-weight: 800;
-    padding: 14px 12px;
+    padding: 3px 3px;
     margin-top: 12px;
     margin-bottom: 8px;
 }}

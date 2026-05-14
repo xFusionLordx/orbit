@@ -66,19 +66,32 @@ impl VpnList {
             .margin_bottom(4)
             .build();
 
+        let header_row = gtk::Box::builder()
+            .orientation(Orientation::Horizontal)
+            .spacing(12)
+            .hexpand(true)
+            .build();
+
         let dash_title = gtk::Label::builder()
             .label("PRIVACY DASHBOARD")
             .css_classes(["orbit-section-header"])
             .halign(gtk::Align::Start)
+            .hexpand(true)
+            .xalign(0.0)
             .build();
-        dashboard.append(&dash_title);
+
         let qr_button = gtk::Button::builder()
             .label("Scan VPN QR Code")
             .icon_name("camera-web-symbolic")
             .css_classes(["orbit-button", "primary", "flat"])
             .margin_top(6)
             .margin_bottom(6)
+            .halign(gtk::Align::End)
             .build();
+
+        header_row.append(&dash_title);
+        header_row.append(&qr_button);
+        dashboard.append(&header_row);
 
         if !crate::ui::qr::has_camera() {
             qr_button.set_sensitive(false);
@@ -91,8 +104,6 @@ impl VpnList {
                 crate::ui::qr::launch_qr_preview_dialog(&root_window);
             }
         });
-
-        dashboard.append(&qr_button);
 
         let info_grid = gtk::Box::builder()
             .orientation(Orientation::Vertical)

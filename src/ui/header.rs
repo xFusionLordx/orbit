@@ -4,7 +4,8 @@ use gtk4::{gdk};
 use gdk_pixbuf::PixbufLoader;
 use std::cell::RefCell;
 use std::rc::Rc;
-use starship_battery::{Manager};
+use std::time::Duration;
+use starship_battery::{Manager, State};
 
 const ORBIT_LOGO: &[u8] = include_bytes!("../../assets/Logo.png");
 
@@ -29,9 +30,6 @@ impl Header {
             .spacing(8)
             .build();
 
-        use std::rc::Rc;
-        use std::time::Duration;
-
         let battery_manager = match Manager::new() {
             Ok(m) => Some(m),
             Err(e) => {
@@ -41,64 +39,94 @@ impl Header {
         };
 
         if let Some(manager) = battery_manager {
-            let battery_track = gtk::Grid::builder()
+            let header = gtk::Box::builder()
                 .orientation(Orientation::Horizontal)
-                .css_classes(["battery-track"])
+                .spacing(12)
+                .hexpand(true)
+                .margin_top(8)
+                .margin_bottom(8)
                 .build();
 
-            battery_track.set_size_request(120, 40);
+            // ======================================================
+            // TIME LABEL (LEFT)
+            // ======================================================
 
-            let battery_fill = gtk::Box::builder()
-                .orientation(Orientation::Horizontal)
-                .spacing(0)
-                .css_classes(["battery-fill"])
+            let time_label = gtk::Label::builder()
+                .label("12:45 PM")
+                .css_classes(["orbit-clock"])
+                .halign(gtk::Align::Start)
                 .build();
+
+            header.append(&time_label);
+
+            // ======================================================
+            // EXPANDING SPACER (PUSHES BATTERY RIGHT)
+            // ======================================================
 
             let spacer = gtk::Box::builder()
-                .orientation(Orientation::Horizontal)
-                .spacing(0)
+                .hexpand(true)
                 .build();
 
-            battery_track.attach(&battery_fill, 0, 0, 1, 1);
-            battery_track.attach(&spacer, 1, 0, 1, 1);
+            header.append(&spacer);
 
-            container.append(&battery_track);
+            // Add header to your main container
+            container.append(&header);
 
-            // Wrap GTK widgets so they can move into the timer closure
-            let battery_track = Rc::new(battery_track);
-            let battery_fill = Rc::new(battery_fill);
-            let spacer = Rc::new(spacer);
+            // ======================================================
+            // BATTERY LABEL (RIGHT)
+            // ======================================================
+
+            let battery_label = gtk::Label::builder()
+                .label("")
+                .css_classes(["orbit-battery"])
+                .halign(gtk::Align::End)
+                .build();
+
+            header.append(&battery_label);
+
+            // ======================================================
+            // BATTERY UPDATER
+            // ======================================================
+
             let manager = Rc::new(manager);
 
             gtk::glib::timeout_add_local(Duration::from_secs(5), move || {
-                // ---- get battery ----
-                let mut percentage: u32 = 0;
+                let mut found_battery = false;
+                let mut charge: i32 = 0;
+                let mut charging = false;
 
                 if let Ok(batteries) = manager.batteries() {
-                    for b in batteries.flatten() {
-                        let state = b.state_of_charge();
-                        percentage = (state.value * 100.0) as u32;
+                    for battery in batteries.flatten() {
+                        found_battery = true;
+                        charge = (battery.state_of_charge().value * 100.0) as i32;
+
+                        charging = matches!(
+                            battery.state(),
+                            State::Charging | State::Full
+                        );
+
+                        break;
                     }
                 }
 
-                let charge = percentage.clamp(0, 100);
-                let empty = 100 - charge;
-
-                // ---- styling ----
-                if charge <= 20 {
-                    battery_fill.remove_css_class("normal");
-                    battery_fill.add_css_class("low");
-                } else {
-                    battery_fill.remove_css_class("low");
-                    battery_fill.add_css_class("normal");
+                // No battery detected
+                if !found_battery {
+                    battery_label.set_label("");
+                    return gtk::glib::ControlFlow::Continue;
                 }
 
-                // ---- update layout ----
-                battery_track.remove(&*battery_fill);
-                battery_track.remove(&*spacer);
+                charge = charge.clamp(0, 100);
 
-                battery_track.attach(&*battery_fill, 0, 0, charge.max(1) as i32, 1);
-                battery_track.attach(&*spacer, charge.max(1) as i32, 0, empty.max(1) as i32, 1);
+                // Choose emoji based on level
+                let icon = if charging {
+                    "🔌"
+                } else if charge <= 10 {
+                    "🪫"
+                } else {
+                    "🔋"
+                };
+
+                battery_label.set_label(&format!("{} {}%", icon, charge));
 
                 gtk::glib::ControlFlow::Continue
             });
