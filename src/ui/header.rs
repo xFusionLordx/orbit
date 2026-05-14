@@ -1,11 +1,10 @@
 use gtk4::prelude::*;
-use gtk4::{self as gtk, CssProvider, Orientation};
-use gtk4::{gdk, glib};
+use gtk4::{self as gtk, Orientation};
+use gtk4::{gdk};
 use gdk_pixbuf::PixbufLoader;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::Duration;
-use starship_battery::{Manager, State};
+use starship_battery::{Manager};
 
 const ORBIT_LOGO: &[u8] = include_bytes!("../../assets/Logo.png");
 
@@ -30,6 +29,9 @@ impl Header {
             .spacing(8)
             .build();
 
+        use std::rc::Rc;
+        use std::time::Duration;
+
         let battery_manager = match Manager::new() {
             Ok(m) => Some(m),
             Err(e) => {
@@ -37,72 +39,69 @@ impl Header {
                 None
             }
         };
+
         if let Some(manager) = battery_manager {
-            let battery_bar = gtk::Box::builder()
+            let battery_track = gtk::Grid::builder()
                 .orientation(Orientation::Horizontal)
-                .spacing(4)
+                .css_classes(["battery-track"])
                 .build();
 
-            battery_bar.add_css_class("battery-meter");
-            battery_bar.set_visible(false);
+            battery_track.set_size_request(120, 40);
 
-            let label = gtk::Label::builder()
-                .label("Battery: Loading...")
-                .margin_start(8)
-                .margin_end(8)
-                .margin_top(4)
-                .margin_bottom(4)
+            let battery_fill = gtk::Box::builder()
+                .orientation(Orientation::Horizontal)
+                .spacing(0)
+                .css_classes(["battery-fill"])
                 .build();
 
-            battery_bar.append(&label);
-            // This does not overwrite or conflict with your existing application-wide provider
-            let local_provider = CssProvider::new();
+            let spacer = gtk::Box::builder()
+                .orientation(Orientation::Horizontal)
+                .spacing(0)
+                .build();
 
-            battery_bar.style_context().add_provider(
-                &local_provider,
-                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 1 // Higher priority ensures local overrides win
-            );
-            // Initialize the hardware connection manager
+            battery_track.attach(&battery_fill, 0, 0, 1, 1);
+            battery_track.attach(&spacer, 1, 0, 1, 1);
 
-            // Keep loop ticking every 5 seconds
-            let interval = Duration::from_secs(5);
+            container.append(&battery_track);
 
-            glib::timeout_add_local(interval, glib::clone!(
-                #[weak]
-                battery_bar,
+            // Wrap GTK widgets so they can move into the timer closure
+            let battery_track = Rc::new(battery_track);
+            let battery_fill = Rc::new(battery_fill);
+            let spacer = Rc::new(spacer);
+            let manager = Rc::new(manager);
 
-                #[weak]
-                label,
+            gtk::glib::timeout_add_local(Duration::from_secs(5), move || {
+                // ---- get battery ----
+                let mut percentage: u32 = 0;
 
-                #[upgrade_or]
-                glib::ControlFlow::Break,
-
-                move || {
-                    if let Ok(mut batteries) = manager.batteries() {
-                        if let Some(Ok(battery)) = batteries.next() {
-
-                            let fraction = battery.state_of_charge().value;
-                            let current_percentage = (fraction * 100.0).round() as u32;
-
-                            let is_charging = matches!(
-                                battery.state(),
-                                State::Charging | State::Full
-                            );
-
-                            battery_bar.set_visible(true);
-                            Self::update_battery_status(
-                                &battery_bar,
-                                &label,
-                                current_percentage,
-                                is_charging,
-                            );
-                        }
+                if let Ok(batteries) = manager.batteries() {
+                    for b in batteries.flatten() {
+                        let state = b.state_of_charge();
+                        percentage = (state.value * 100.0) as u32;
                     }
-
-                    gtk::glib::ControlFlow::Continue
                 }
-            ));
-            container.append(&battery_bar);
+
+                let charge = percentage.clamp(0, 100);
+                let empty = 100 - charge;
+
+                // ---- styling ----
+                if charge <= 20 {
+                    battery_fill.remove_css_class("normal");
+                    battery_fill.add_css_class("low");
+                } else {
+                    battery_fill.remove_css_class("low");
+                    battery_fill.add_css_class("normal");
+                }
+
+                // ---- update layout ----
+                battery_track.remove(&*battery_fill);
+                battery_track.remove(&*spacer);
+
+                battery_track.attach(&*battery_fill, 0, 0, charge.max(1) as i32, 1);
+                battery_track.attach(&*spacer, charge.max(1) as i32, 0, empty.max(1) as i32, 1);
+
+                gtk::glib::ControlFlow::Continue
+            });
         }
 
         let title_row = gtk::Box::builder()
@@ -270,25 +269,5 @@ impl Header {
             _ => {}
         }
     }
-
-    fn update_battery_status(battery_box: &gtk::Box, label: &gtk::Label, percentage: u32, is_plugged_in: bool) {
-        if is_plugged_in {
-            label.set_label("Battery: AC Power");
-
-            // Force the gradient to fill 100% using AC green
-            battery_box.set_property("custom-css-properties", &format!("--bat-pct: 100%; --bat-color: #2ec27e;"));
-        } else {
-            label.set_label(&format!("Battery: {}%", percentage));
-
-            let fill_color = if percentage <= 15 { "#e01b24" } else { "#3584e4" };
-
-            // Pass the updated raw percentage and color state straight to the UI node
-            battery_box.set_property(
-                "custom-css-properties",
-                &format!("--bat-pct: {}%; --bat-color: {};", percentage, fill_color)
-            );
-        }
-    }
-
 }
 

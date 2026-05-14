@@ -694,6 +694,26 @@ window switch.orbit-toggle-switch:checked:not(:backdrop) slider {{
     opacity: 0.4;
     transition: opacity 0.2s ease;
 }}
+
+.battery-track {{
+    border: 2px solid #333333;
+    border-radius: 6px;
+    padding: 3px;
+    background-color: #f5f5f5;
+}}
+
+.battery-fill {{
+    border-radius: 3px;
+    transition: background-color 0.3s ease;
+}}
+
+.battery-fill.normal {{
+    background-color: #2ec27e;
+}}
+
+.battery-fill.low {{
+    background-color: #e01b24;
+}}
 "#,
             panel_bg = panel_bg,
             section_bg = section_bg,
