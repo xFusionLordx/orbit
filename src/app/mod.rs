@@ -85,12 +85,12 @@ impl OrbitApp {
         
         self.app.connect_activate(move |app| {
             let app_quit = app.clone();
-            glib::unix_signal_add_local(15, move || {
+            glib_unix::unix_signal_add_local(15, move || {
                 app_quit.quit();
                 glib::ControlFlow::Break
             });
             let app_quit_int = app.clone();
-            glib::unix_signal_add_local(2, move || {
+            glib_unix::unix_signal_add_local(2, move || {
                 app_quit_int.quit();
                 glib::ControlFlow::Break
             });

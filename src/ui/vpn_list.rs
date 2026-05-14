@@ -72,6 +72,27 @@ impl VpnList {
             .halign(gtk::Align::Start)
             .build();
         dashboard.append(&dash_title);
+        let qr_button = gtk::Button::builder()
+            .label("Scan VPN QR Code")
+            .icon_name("camera-web-symbolic")
+            .css_classes(["orbit-button", "primary", "flat"])
+            .margin_top(6)
+            .margin_bottom(6)
+            .build();
+
+        if !crate::ui::qr::has_camera() {
+            qr_button.set_sensitive(false);
+            qr_button.set_label("Scan VPN QR Code (No Camera Found)");
+        }
+
+        qr_button.connect_clicked(|btn| {
+            // Find Orbit's primary top-level display window to host our modal dialog overlay layer safely
+            if let Some(root_window) = btn.root().and_then(|r| r.downcast::<gtk::ApplicationWindow>().ok()) {
+                crate::ui::qr::launch_qr_preview_dialog(&root_window);
+            }
+        });
+
+        dashboard.append(&qr_button);
 
         let info_grid = gtk::Box::builder()
             .orientation(Orientation::Vertical)
@@ -216,7 +237,7 @@ impl VpnList {
         scroll_content.append(&list_box);
         scrolled.set_child(Some(&scroll_content));
         container.append(&scrolled);
-        
+
         let list = Self {
             container,
             list_box,

@@ -5,5 +5,7 @@ pub mod device_list;
 pub mod saved_networks_list;
 pub mod vpn_list;
 
+pub mod qr;
+
 pub use window::OrbitWindow;
 pub use device_list::DeviceAction;

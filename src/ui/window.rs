@@ -129,19 +129,19 @@ impl OrbitWindow {
             .resizable(false)
             .decorated(false)
             .build();
-        
+
         window.init_layer_shell();
-        window.set_namespace("orbit");
-        window.set_layer(Layer::Overlay);
+        window.set_namespace(Option::from("orbit"));
+        window.set_layer(Layer::Top);
         window.set_keyboard_mode(KeyboardMode::None);
         window.set_exclusive_zone(0);
         window.set_default_size(420, 500);
-        
+
         window.add_css_class("background");
-        
+
         let css_provider = gtk4::CssProvider::new();
         let user_css_provider = gtk4::CssProvider::new();
-        
+
         let display = gtk4::gdk::Display::default().expect("Failed to get default display");
         gtk4::style_context_add_provider_for_display(
             &display,
@@ -164,33 +164,33 @@ impl OrbitWindow {
             .hexpand(true)
             .overflow(gtk::Overflow::Hidden)
             .build();
-        
+
         let header = Header::new();
         main_box.append(header.widget());
-        
+
         let stack = gtk::Stack::builder()
             .vexpand(true)
             .hexpand(true)
             .transition_type(parse_stack_transition(&config.borrow().stack_transition))
             .transition_duration(config.borrow().stack_transition_duration)
             .build();
-        
+
         let network_list = NetworkList::new();
         let saved_networks_list = SavedNetworksList::new();
         let device_list = DeviceList::new();
         let vpn_list = VpnList::new();
-        
+
         stack.add_named(network_list.widget(), Some("wifi"));
         stack.add_named(device_list.widget(), Some("bluetooth"));
         stack.add_named(vpn_list.widget(), Some("vpn"));
         stack.set_visible_child_name("wifi");
         stack.set_size_request(400, 350);
-        
+
         main_box.append(&stack);
-        
+
         let overlay = Overlay::new();
         overlay.set_child(Some(&main_box));
-        
+
         let details_box = gtk::Box::builder()
             .orientation(Orientation::Vertical)
             .css_classes(["orbit-details-overlay"])
@@ -200,35 +200,35 @@ impl OrbitWindow {
             .margin_top(16)
             .margin_bottom(16)
             .build();
-        
+
         let details_header_row = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(12)
             .build();
-        
+
         let details_title = gtk::Label::builder()
             .label("Network Details")
             .css_classes(["orbit-detail-label"])
             .halign(gtk::Align::Start)
             .hexpand(true)
             .build();
-        
+
         let details_close_icon_btn = gtk::Button::builder()
             .icon_name("window-close-symbolic")
             .css_classes(["orbit-button", "flat"])
             .build();
-        
+
         details_header_row.append(&details_title);
         details_header_row.append(&details_close_icon_btn);
-        
+
         let details_content = gtk::Box::builder()
             .orientation(Orientation::Vertical)
             .spacing(4)
             .build();
-        
+
         details_box.append(&details_header_row);
         details_box.append(&details_content);
-        
+
         let details_revealer = gtk::Revealer::builder()
             .child(&details_box)
             .reveal_child(false)
@@ -237,14 +237,14 @@ impl OrbitWindow {
             .valign(gtk::Align::End)
             .can_target(true)
             .build();
-        
+
         let details_revealer_clone = details_revealer.clone();
         details_close_icon_btn.connect_clicked(move |_| {
             details_revealer_clone.set_reveal_child(false);
         });
-        
+
         overlay.add_overlay(&details_revealer);
-        
+
         let password_box = gtk::Box::builder()
             .orientation(Orientation::Vertical)
             .spacing(12)
@@ -254,49 +254,49 @@ impl OrbitWindow {
             .margin_top(16)
             .margin_bottom(16)
             .build();
-        
+
         let password_label = gtk::Label::builder()
             .label("Enter password:")
             .css_classes(["orbit-detail-label"])
             .halign(gtk::Align::Start)
             .build();
-        
+
         let password_entry = gtk::PasswordEntry::builder()
             .placeholder_text("Password")
             .hexpand(true)
             .build();
-        
+
         let password_error_label = gtk::Label::builder()
             .label("")
             .css_classes(["orbit-error-text-small"])
             .halign(gtk::Align::Start)
             .visible(false)
             .build();
-        
+
         let password_btn_row = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(8)
             .halign(gtk::Align::End)
             .build();
-        
+
         let password_cancel_btn = gtk::Button::builder()
             .label("Cancel")
             .css_classes(["orbit-button", "flat"])
             .build();
-        
+
         let password_connect_btn = gtk::Button::builder()
             .label("Connect")
             .css_classes(["orbit-button", "primary", "flat"])
             .build();
-        
+
         password_btn_row.append(&password_cancel_btn);
         password_btn_row.append(&password_connect_btn);
-        
+
         password_box.append(&password_label);
         password_box.append(&password_entry);
         password_box.append(&password_error_label);
         password_box.append(&password_btn_row);
-        
+
         let password_revealer = gtk::Revealer::builder()
             .child(&password_box)
             .reveal_child(false)
@@ -305,14 +305,14 @@ impl OrbitWindow {
             .valign(gtk::Align::End)
             .can_target(true)
             .build();
-        
+
         let password_revealer_clone = password_revealer.clone();
         let password_entry_clone = password_entry.clone();
         password_cancel_btn.connect_clicked(move |_| {
             password_revealer_clone.set_reveal_child(false);
             password_entry_clone.set_text("");
         });
-        
+
         overlay.add_overlay(&password_revealer);
 
         let hidden_box = gtk::Box::builder()
@@ -324,47 +324,47 @@ impl OrbitWindow {
             .margin_top(16)
             .margin_bottom(16)
             .build();
-        
+
         let hidden_label = gtk::Label::builder()
             .label("Connect to Hidden Network")
             .css_classes(["orbit-detail-label"])
             .halign(gtk::Align::Start)
             .build();
-        
+
         let hidden_ssid_entry = gtk::Entry::builder()
             .placeholder_text("Network Name (SSID)")
             .hexpand(true)
             .build();
-        
+
         let hidden_pass_entry = gtk::PasswordEntry::builder()
             .placeholder_text("Password (Optional)")
             .hexpand(true)
             .build();
-        
+
         let hidden_btn_row = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(8)
             .halign(gtk::Align::End)
             .build();
-        
+
         let hidden_cancel_btn = gtk::Button::builder()
             .label("Cancel")
             .css_classes(["orbit-button", "flat"])
             .build();
-        
+
         let hidden_connect_btn = gtk::Button::builder()
             .label("Connect")
             .css_classes(["orbit-button", "primary", "flat"])
             .build();
-        
+
         hidden_btn_row.append(&hidden_cancel_btn);
         hidden_btn_row.append(&hidden_connect_btn);
-        
+
         hidden_box.append(&hidden_label);
         hidden_box.append(&hidden_ssid_entry);
         hidden_box.append(&hidden_pass_entry);
         hidden_box.append(&hidden_btn_row);
-        
+
         let hidden_revealer = gtk::Revealer::builder()
             .child(&hidden_box)
             .reveal_child(false)
@@ -373,12 +373,12 @@ impl OrbitWindow {
             .valign(gtk::Align::End)
             .can_target(true)
             .build();
-        
+
         let hidden_revealer_clone = hidden_revealer.clone();
         hidden_cancel_btn.connect_clicked(move |_| {
             hidden_revealer_clone.set_reveal_child(false);
         });
-        
+
         overlay.add_overlay(&hidden_revealer);
 
         let error_box = gtk::Box::builder()
@@ -390,44 +390,44 @@ impl OrbitWindow {
             .margin_top(16)
             .margin_bottom(16)
             .build();
-        
+
         let error_header = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(8)
             .build();
-            
+
         let error_icon = gtk::Image::builder()
             .icon_name("dialog-error-symbolic")
             .pixel_size(16)
             .valign(gtk::Align::Center)
             .build();
-            
+
         let error_title = gtk::Label::builder()
             .label("Error")
             .css_classes(["orbit-error-title"])
             .halign(gtk::Align::Start)
             .hexpand(true)
             .build();
-            
+
         let error_close_btn = gtk::Button::builder()
             .icon_name("window-close-symbolic")
             .css_classes(["orbit-button", "flat"])
             .build();
-            
+
         error_header.append(&error_icon);
         error_header.append(&error_title);
         error_header.append(&error_close_btn);
-        
+
         let error_label = gtk::Label::builder()
             .label("")
             .css_classes(["orbit-error-text"])
             .halign(gtk::Align::Start)
             .wrap(true)
             .build();
-            
+
         error_box.append(&error_header);
         error_box.append(&error_label);
-        
+
         let error_revealer = gtk::Revealer::builder()
             .child(&error_box)
             .reveal_child(false)
@@ -436,12 +436,12 @@ impl OrbitWindow {
             .valign(gtk::Align::End)
             .can_target(true)
             .build();
-            
+
         let error_revealer_clone = error_revealer.clone();
         error_close_btn.connect_clicked(move |_| {
             error_revealer_clone.set_reveal_child(false);
         });
-        
+
         overlay.add_overlay(&error_revealer);
 
         // Saved Networks Overlay
@@ -451,35 +451,35 @@ impl OrbitWindow {
             .spacing(8)
             .width_request(380)
             .build();
-        
+
         let saved_header_row = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(12)
             .build();
-        
+
         let saved_title = gtk::Label::builder()
             .label("Saved Networks")
             .css_classes(["orbit-detail-label"])
             .halign(gtk::Align::Start)
             .hexpand(true)
             .build();
-        
+
         let saved_close_icon_btn = gtk::Button::builder()
             .icon_name("window-close-symbolic")
             .css_classes(["orbit-button", "flat"])
             .build();
-        
+
         saved_header_row.append(&saved_title);
         saved_header_row.append(&saved_close_icon_btn);
-        
+
         saved_box.append(&saved_header_row);
-        
+
         let saved_list_widget = saved_networks_list.widget().clone();
         saved_list_widget.set_visible(true);
         saved_list_widget.set_vexpand(true);
         saved_list_widget.set_hexpand(true);
         saved_box.append(&saved_list_widget);
-        
+
         let saved_revealer = gtk::Revealer::builder()
             .child(&saved_box)
             .reveal_child(false)
@@ -488,12 +488,12 @@ impl OrbitWindow {
             .valign(gtk::Align::End)
             .can_target(true)
             .build();
-        
+
         let saved_revealer_clone = saved_revealer.clone();
         saved_close_icon_btn.connect_clicked(move |_| {
             saved_revealer_clone.set_reveal_child(false);
         });
-        
+
         overlay.add_overlay(&saved_revealer);
 
         // Bluetooth Agent Overlay
@@ -506,43 +506,43 @@ impl OrbitWindow {
             .margin_top(16)
             .margin_bottom(16)
             .build();
-        
+
         let bt_agent_label = gtk::Label::builder()
             .label("Bluetooth Pairing Request")
             .css_classes(["orbit-detail-label"])
             .halign(gtk::Align::Start)
             .wrap(true)
             .build();
-        
+
         let bt_agent_entry = gtk::Entry::builder()
             .placeholder_text("PIN / Passkey")
             .hexpand(true)
             .visible(false)
             .build();
-        
+
         let bt_agent_btn_row = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(8)
             .halign(gtk::Align::End)
             .build();
-        
+
         let bt_agent_cancel_btn = gtk::Button::builder()
             .label("Cancel")
             .css_classes(["orbit-button", "flat"])
             .build();
-        
+
         let bt_agent_confirm_btn = gtk::Button::builder()
             .label("Confirm")
             .css_classes(["orbit-button", "primary", "flat"])
             .build();
-        
+
         bt_agent_btn_row.append(&bt_agent_cancel_btn);
         bt_agent_btn_row.append(&bt_agent_confirm_btn);
-        
+
         bt_agent_box.append(&bt_agent_label);
         bt_agent_box.append(&bt_agent_entry);
         bt_agent_box.append(&bt_agent_btn_row);
-        
+
         let bt_agent_revealer = gtk::Revealer::builder()
             .child(&bt_agent_box)
             .reveal_child(false)
@@ -551,9 +551,9 @@ impl OrbitWindow {
             .valign(gtk::Align::End)
             .can_target(true)
             .build();
-        
+
         overlay.add_overlay(&bt_agent_revealer);
-        
+
         let wired_box = gtk::Box::builder()
             .orientation(Orientation::Vertical)
             .css_classes(["orbit-wired-overlay"])
@@ -563,37 +563,37 @@ impl OrbitWindow {
             .margin_top(16)
             .margin_bottom(16)
             .build();
-        
+
         let wired_header_row = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(12)
             .build();
-        
+
         let wired_title = gtk::Label::builder()
             .label("Wired Connections")
             .css_classes(["orbit-detail-label"])
             .halign(gtk::Align::Start)
             .hexpand(true)
             .build();
-        
+
         let wired_close_btn = gtk::Button::builder()
             .icon_name("window-close-symbolic")
             .css_classes(["orbit-button", "flat"])
             .build();
-        
+
         wired_header_row.append(&wired_title);
         wired_header_row.append(&wired_close_btn);
-        
+
         wired_box.append(&wired_header_row);
-        
+
         let wired_list_box = gtk::Box::builder()
             .orientation(Orientation::Vertical)
             .spacing(8)
             .vexpand(true)
             .build();
-        
+
         wired_box.append(&wired_list_box);
-        
+
         let wired_revealer = gtk::Revealer::builder()
             .child(&wired_box)
             .reveal_child(false)
@@ -602,31 +602,31 @@ impl OrbitWindow {
             .valign(gtk::Align::End)
             .can_target(true)
             .build();
-        
+
         overlay.add_overlay(&wired_revealer);
-        
+
         let wired_revealer_close = wired_revealer.clone();
         wired_close_btn.connect_clicked(move |_| {
             wired_revealer_close.set_reveal_child(false);
         });
-        
+
         let root_revealer = gtk::Revealer::builder()
             .transition_type(parse_revealer_transition(&config.borrow().window_transition))
             .transition_duration(config.borrow().window_transition_duration)
             .child(&overlay)
             .valign(gtk::Align::Start)
             .build();
-        
+
         overlay.set_valign(gtk::Align::Start);
         main_box.set_valign(gtk::Align::Start);
-        
+
         window.set_child(Some(&root_revealer));
-        
+
         let password_callback: Rc<RefCell<Option<Rc<dyn Fn(Option<String>)>>>> = Rc::new(RefCell::new(None));
         let details_callback: Rc<RefCell<Option<Rc<dyn Fn(String, bool)>>>> = Rc::new(RefCell::new(None));
         let forget_callback: Rc<RefCell<Option<Rc<dyn Fn(String)>>>> = Rc::new(RefCell::new(None));
         let hidden_callback: Rc<RefCell<Option<Rc<dyn Fn(Option<(String, String)>)>>>> = Rc::new(RefCell::new(None));
-        
+
         let bt_pin_callback: Rc<RefCell<Option<async_channel::Sender<String>>>> = Rc::new(RefCell::new(None));
         let bt_passkey_callback: Rc<RefCell<Option<async_channel::Sender<u32>>>> = Rc::new(RefCell::new(None));
         let bt_confirm_callback: Rc<RefCell<Option<async_channel::Sender<bool>>>> = Rc::new(RefCell::new(None));
@@ -640,7 +640,7 @@ impl OrbitWindow {
         let bt_conf_cb = bt_confirm_callback.clone();
         let bt_rev = bt_agent_revealer.clone();
         let bt_ent = bt_agent_entry.clone();
-        
+
         bt_agent_confirm_btn.connect_clicked(move |_| {
             if let Some(tx) = bt_pin_cb.borrow_mut().take() {
                 let _ = tx.send_blocking(bt_ent.text().to_string());
@@ -769,7 +769,7 @@ impl OrbitWindow {
             }
         });
         window.add_controller(key_controller);
-        
+
         win.apply_position();
         win.apply_theme();
         win
