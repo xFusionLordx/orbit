@@ -222,8 +222,8 @@ pub fn launch_qr_preview_dialog(parent_window: &gtk4::ApplicationWindow) {
                         let name = entry.text().trim().to_string();
                         if !name.is_empty() {
                             match import_vpn_from_qr_string(&payload, vpn_type, name) {
-                                Ok(_) => println!("VPN imported successfully"),
-                                Err(e) => eprintln!("VPN import failed: {}", e),
+                                Ok(_) => log::info!("VPN imported successfully"),
+                                Err(e) => log::info!("VPN import failed: {}", e),
                             }
                             dialog.close();
                         }
@@ -362,7 +362,7 @@ fn import_vpn_from_qr_string(
         return Err(String::from_utf8_lossy(&rename_output.stderr).into());
     }
 
-    println!("Successfully configured multiple profiles. Saved as: {}", target_display_id);
+    log::info!("Successfully configured multiple profiles. Saved as: {}", target_display_id);
     Ok(())
 }
 

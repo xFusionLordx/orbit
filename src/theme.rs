@@ -409,7 +409,7 @@ window {{
 
 /* Section Headers */
 .orbit-section-header {{
-    font-size: 10px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.15em;
     color: {gold};
@@ -695,24 +695,34 @@ window switch.orbit-toggle-switch:checked:not(:backdrop) slider {{
     transition: opacity 0.2s ease;
 }}
 
-.battery-track {{
-    border: 2px solid #333333;
-    border-radius: 6px;
-    padding: 3px;
-    background-color: #f5f5f5;
+dropdown {{
+    background: none;
+    border: none;
 }}
 
-.battery-fill {{
-    border-radius: 3px;
-    transition: background-color 0.3s ease;
+dropdown label {{
+    margin-left: 10px;
+    color: {fg};
 }}
 
-.battery-fill.normal {{
-    background-color: #2ec27e;
+dropdown arrow {{
+    margin-right: 10px;
+    color: {accent};
 }}
 
-.battery-fill.low {{
-    background-color: #e01b24;
+dropdown arrow:hover {{
+    margin-right: 10px;
+    color: {accent_hover};
+}}
+
+dropdown button {{
+    padding: 0px;
+    background: none;
+    border: 1px solid {accent};
+}}
+
+dropdown button:hover {{
+    border-color: {accent_hover};
 }}
 "#,
             panel_bg = panel_bg,

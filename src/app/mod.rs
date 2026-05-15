@@ -2,6 +2,8 @@ use gtk4::{Application, glib};
 use gtk4::prelude::*;
 use gtk4::gio::ApplicationFlags;
 use std::cell::RefCell;
+use std::io::{BufRead, BufReader};
+use std::process::{Command, Stdio};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
@@ -9,9 +11,10 @@ pub mod daemon;
 
 use crate::config::Config;
 use crate::theme::Theme;
-use crate::dbus::{NetworkManager, BluetoothManager};
+use crate::dbus::{NetworkManager, BluetoothManager, AudioManager};
 use crate::dbus::network_manager::{AccessPoint, SecurityType, SavedNetwork, NetworkDetails, VpnProfile, WiredProfile};
 use crate::dbus::bluez::{BluetoothDevice, BluetoothDeviceDetails};
+use crate::dbus::audio_manager::{ AudioDevice };
 use crate::ui::{OrbitWindow, DeviceAction};
 use daemon::{DaemonServer, DaemonCommand};
 
@@ -39,6 +42,7 @@ pub enum AppEvent {
     BtAuthRequest(String, async_channel::Sender<bool>),
     BtAgentCancel,
     VpnProfilesResult(Vec<VpnProfile>),
+    AudioDevicesUpdated(Vec<AudioDevice>, Option<String>),
     WiredProfilesResult(Vec<WiredProfile>),
     PublicIpResult(String, String, Vec<String>, bool),
     Error(String),
@@ -243,10 +247,26 @@ impl OrbitApp {
             if !is_daemon {
                 win.show();
             }
-            
+
+            let audio: Arc<Mutex<Option<AudioManager>>> = Arc::new(Mutex::new(None));
+
+            let audio_clone = audio.clone();
+            rt.spawn(async move {
+                match AudioManager::new().await {
+                    Ok(manager) => {
+                        let mut guard = audio_clone.lock().unwrap();
+                        *guard = Some(manager);
+                        println!("AudioManager subsystem connected successfully over D-Bus.");
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to initialize AudioManager subsystem: {}", e);
+                    }
+                }
+            });
+
             setup_events_receiver(win.clone(), rx.clone(), is_visible.clone(), last_refresh.clone(), nm.clone(), bt.clone(), rt.clone(), tx.clone(), win_theme.clone(), is_switching_pwr.clone());
-            setup_ui_callbacks(win.clone(), nm.clone(), bt.clone(), rt.clone(), tx.clone(), current_tab.clone(), is_switching_pwr.clone());
-            setup_periodic_refresh(win.clone(), nm, bt, rt.clone(), tx.clone(), is_visible.clone(), current_tab.clone());
+            setup_ui_callbacks(win.clone(), nm.clone(), bt.clone(), audio.clone(), rt.clone(), tx.clone(), current_tab.clone(), is_switching_pwr.clone());
+            setup_periodic_refresh(win.clone(), nm, bt, audio.clone(), rt.clone(), tx.clone(), is_visible.clone(), current_tab.clone());
         });
         
         self.app.run_with_args(&[] as &[&str])
@@ -329,7 +349,7 @@ fn setup_events_receiver(
                 }
                 AppEvent::Notify(msg) => {
                     std::thread::spawn(move || {
-                        let _ = std::process::Command::new("notify-send")
+                        let _ = Command::new("notify-send")
                             .arg("Orbit")
                             .arg(&msg)
                             .arg("--app-name=Orbit")
@@ -340,14 +360,14 @@ fn setup_events_receiver(
                 }
                 AppEvent::CaptivePortal(ssid) => {
                     std::thread::spawn(move || {
-                        let _ = std::process::Command::new("notify-send")
+                        let _ = Command::new("notify-send")
                             .arg("Orbit")
                             .arg(&format!("Captive portal detected on {} — opening login page...", ssid))
                             .arg("--app-name=Orbit")
                             .arg("-i")
                             .arg("network-wireless")
                             .spawn();
-                        let _ = std::process::Command::new("xdg-open")
+                        let _ = Command::new("xdg-open")
                             .arg("http://neverssl.com")
                             .spawn();
                     });
@@ -442,6 +462,15 @@ fn setup_events_receiver(
                 }
                 AppEvent::VpnProfilesResult(profiles) => {
                     win.vpn_list().set_profiles(profiles);
+                }
+                AppEvent::AudioDevicesUpdated(devices, active_id) => {
+                    println!("Device count: {}", devices.len());
+                    let fallback_id = devices.iter()
+                        .find(|d| d.is_output)
+                        .map(|d| d.id.clone());
+                    let true_active_id = active_id.or(fallback_id);
+
+                    win.audio_list().set_audio_devices(devices, true_active_id.as_deref());
                 }
                 AppEvent::WiredProfilesResult(profiles) => {
                     win.show_wired_overlay(&profiles);
@@ -688,6 +717,7 @@ fn setup_ui_callbacks(
     win: OrbitWindow,
     nm: Arc<Mutex<Option<NetworkManager>>>,
     bt: Arc<Mutex<Option<BluetoothManager>>>,
+    audio: Arc<Mutex<Option<AudioManager>>>,
     rt: Arc<tokio::runtime::Runtime>,
     tx: async_channel::Sender<AppEvent>,
     current_tab: Rc<RefCell<String>>,
@@ -844,6 +874,99 @@ fn setup_ui_callbacks(
                 false
             ));
         });
+    });
+
+    let stack_audio = stack.clone();
+    let header_audio = header.clone();
+    let current_tab_audio = current_tab.clone();
+    let audio_tab = audio.clone(); // Your Audio management interface wrapper
+    let rt_audio_tab = rt.clone();
+    let tx_audio_tab = tx.clone();
+
+    header.audio_tab().connect_clicked(move |_| {
+        *current_tab_audio.borrow_mut() = "audio".to_string();
+        stack_audio.set_visible_child_name("audio");
+        header_audio.set_tab("audio");
+
+        let audio = audio_tab.clone();
+        let rt = rt_audio_tab.clone();
+        let tx = tx_audio_tab.clone();
+
+        std::thread::spawn(move || {
+            let audio_guard = audio.lock().unwrap();
+            if let Some(ref audio_inst) = *audio_guard {
+                // 1. Fetch from PipeWire/PulseAudio via D-Bus
+                if let Ok(device_list) = rt.block_on(async { audio_inst.get_devices().await }) {
+
+                    // 2. Identify which device ID is currently active/default
+                    let active_id = device_list.iter()
+                        .find(|d| d.is_output && !d.is_muted) // Or fetch default sink property
+                        .map(|d| d.id.clone());
+
+                    // 3. Dispatch to main loop
+                    let _ = tx.send_blocking(AppEvent::AudioDevicesUpdated(device_list, active_id));
+                }
+            }
+        });
+    });
+
+    let audio_manager_vol = audio.clone();
+    let rt_vol = rt.clone();
+    let audio_manager_mute = audio.clone();
+    let rt_mute = rt.clone();
+    let audio_manager_route = audio.clone();
+    let rt_route = rt.clone();
+
+    win.audio_list().set_on_volume_changed(move |selected_name, new_volume| {
+        let audio_guard = audio_manager_vol.lock().unwrap();
+        if let Some(ref manager) = *audio_guard {
+            let rt = rt_vol.clone();
+            let manager_clone = manager.clone();
+
+            // Look up index key by matching name against our backend cache snapshot
+            let devices = manager.get_cached_devices();
+            if let Some(target_device) = devices.iter().find(|d| d.name == selected_name) {
+                let target_id = target_device.id.clone();
+                rt.spawn(async move {
+                    let _ = manager_clone.set_volume(&target_id, new_volume).await;
+                });
+            }
+        }
+    });
+
+    win.audio_list().set_on_mute_toggled(move |selected_name, should_mute| {
+        let audio_guard = audio_manager_mute.lock().unwrap();
+        if let Some(ref manager) = *audio_guard {
+            let rt = rt_mute.clone();
+            let manager_clone = manager.clone();
+
+            let devices = manager.get_cached_devices();
+            if let Some(target_device) = devices.iter().find(|d| d.name == selected_name) {
+                let target_id = target_device.id.clone();
+                rt.spawn(async move {
+                    let _ = manager_clone.set_mute(&target_id, should_mute).await;
+                });
+            }
+        }
+    });
+
+    win.audio_list().set_on_default_changed(move |selected_name| {
+        let audio_guard = audio_manager_route.lock().unwrap();
+
+        if let Some(ref manager) = *audio_guard {
+            let rt = rt_route.clone();
+            let manager_clone = manager.clone();
+
+            let devices = manager.get_cached_devices();
+
+            if let Some(target_device) = devices.iter().find(|d| d.name == selected_name) {
+                let target_id = target_device.id.clone();
+
+                rt.spawn(async move {
+                    let _ = manager_clone.set_default_sink(&target_id).await;
+                });
+            }
+        }
     });
 
     let _win_wired_btn = win.clone();
@@ -1414,28 +1537,31 @@ fn setup_periodic_refresh(
     _win: OrbitWindow,
     nm: Arc<Mutex<Option<NetworkManager>>>,
     bt: Arc<Mutex<Option<BluetoothManager>>>,
-    rt: Arc<tokio::runtime::Runtime>,
-    tx: async_channel::Sender<AppEvent>,
+    audio: Arc<Mutex<Option<AudioManager>>>,
+    ort: Arc<tokio::runtime::Runtime>,
+    otx: async_channel::Sender<AppEvent>,
     is_visible: Rc<RefCell<bool>>,
     current_tab: Rc<RefCell<String>>,
 ) {
     let stack = _win.stack().clone();
+    let rt = ort.clone();
+    let tx = otx.clone();
     glib::timeout_add_local(std::time::Duration::from_secs(5), move || {
         if !*is_visible.borrow() {
             return glib::ControlFlow::Continue;
         }
-        
+
         let nm = nm.clone();
         let bt = bt.clone();
         let rt = rt.clone();
         let tx = tx.clone();
         let tab = current_tab.borrow().clone();
         let current_visible = stack.visible_child_name().map(|s| s.to_string());
-        
+
         if Some(tab.clone()) != current_visible {
              return glib::ControlFlow::Continue;
         }
-        
+
         std::thread::spawn(move || {
             if tab == "wifi" {
                 let nm_guard = nm.lock().unwrap();
@@ -1460,7 +1586,60 @@ fn setup_periodic_refresh(
                 }
             }
         });
-        
         glib::ControlFlow::Continue
+    });
+
+    let audio_event_loop = audio.clone();
+    let rt_event_loop = ort.clone();
+    let tx_event_loop = otx.clone();
+
+    std::thread::spawn(move || {
+        let mut last_refresh_time = std::time::Instant::now();
+
+        let mut child = Command::new("stdbuf")
+            .args(&["-oL", "pactl", "subscribe"])
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap_or_else(|_| {
+                Command::new("pactl")
+                    .arg("subscribe")
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .expect("Failed to initialize pactl context")
+            });
+
+        if let Some(stdout) = child.stdout.take() {
+            let reader = BufReader::new(stdout);
+            for line_result in reader.lines() {
+                if let Ok(line) = line_result {
+                    let trimmed = line.trim();
+
+                    if trimmed.contains("client") || trimmed.contains("'client'") || trimmed.contains("#") && !trimmed.contains("sink") {
+                        continue;
+                    }
+
+                    if last_refresh_time.elapsed() < std::time::Duration::from_millis(150) {
+                        continue;
+                    }
+
+                    if trimmed.contains("sink") && (trimmed.contains("change") || trimmed.contains("new") || trimmed.contains("remove")) {
+                        last_refresh_time = std::time::Instant::now();
+
+                        let audio_inst = audio_event_loop.clone();
+                        let rt = rt_event_loop.clone();
+                        let tx = tx_event_loop.clone();
+
+                        std::thread::spawn(move || {
+                            let audio_guard = audio_inst.lock().unwrap();
+                            if let Some(ref audio_backend) = *audio_guard {
+                                if let Ok(devices) = rt.block_on(async { audio_backend.get_devices().await }) {
+                                    let _ = tx.send_blocking(AppEvent::AudioDevicesUpdated(devices, None));
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        }
     });
 }

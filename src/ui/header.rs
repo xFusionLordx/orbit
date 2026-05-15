@@ -4,8 +4,7 @@ use gtk4::{gdk};
 use gdk_pixbuf::PixbufLoader;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::Duration;
-use starship_battery::{Manager, State};
+use crate::ui::status_bar::StatusBar;
 
 const ORBIT_LOGO: &[u8] = include_bytes!("../../assets/Logo.png");
 
@@ -15,6 +14,7 @@ pub struct Header {
     wifi_tab: gtk::Button,
     bluetooth_tab: gtk::Button,
     vpn_tab: gtk::Button,
+    audio_tab: gtk::Button,
     wired_button: gtk::Button,
     power_switch: gtk::Switch,
     power_box: gtk::Box,
@@ -30,107 +30,8 @@ impl Header {
             .spacing(8)
             .build();
 
-        let battery_manager = match Manager::new() {
-            Ok(m) => Some(m),
-            Err(e) => {
-                eprintln!("Battery subsystem disabled (system may lack a battery): {}", e);
-                None
-            }
-        };
-
-        if let Some(manager) = battery_manager {
-            let header = gtk::Box::builder()
-                .orientation(Orientation::Horizontal)
-                .spacing(12)
-                .hexpand(true)
-                .margin_top(8)
-                .margin_bottom(8)
-                .build();
-
-            // ======================================================
-            // TIME LABEL (LEFT)
-            // ======================================================
-
-            let time_label = gtk::Label::builder()
-                .label("12:45 PM")
-                .css_classes(["orbit-clock"])
-                .halign(gtk::Align::Start)
-                .build();
-
-            header.append(&time_label);
-
-            // ======================================================
-            // EXPANDING SPACER (PUSHES BATTERY RIGHT)
-            // ======================================================
-
-            let spacer = gtk::Box::builder()
-                .hexpand(true)
-                .build();
-
-            header.append(&spacer);
-
-            // Add header to your main container
-            container.append(&header);
-
-            // ======================================================
-            // BATTERY LABEL (RIGHT)
-            // ======================================================
-
-            let battery_label = gtk::Label::builder()
-                .label("")
-                .css_classes(["orbit-battery"])
-                .halign(gtk::Align::End)
-                .build();
-
-            header.append(&battery_label);
-
-            // ======================================================
-            // BATTERY UPDATER
-            // ======================================================
-
-            let manager = Rc::new(manager);
-
-            gtk::glib::timeout_add_local(Duration::from_secs(5), move || {
-                let mut found_battery = false;
-                let mut charge: i32 = 0;
-                let mut charging = false;
-
-                if let Ok(batteries) = manager.batteries() {
-                    for battery in batteries.flatten() {
-                        found_battery = true;
-                        charge = (battery.state_of_charge().value * 100.0) as i32;
-
-                        charging = matches!(
-                            battery.state(),
-                            State::Charging | State::Full
-                        );
-
-                        break;
-                    }
-                }
-
-                // No battery detected
-                if !found_battery {
-                    battery_label.set_label("");
-                    return gtk::glib::ControlFlow::Continue;
-                }
-
-                charge = charge.clamp(0, 100);
-
-                // Choose emoji based on level
-                let icon = if charging {
-                    "🔌"
-                } else if charge <= 10 {
-                    "🪫"
-                } else {
-                    "🔋"
-                };
-
-                battery_label.set_label(&format!("{} {}%", icon, charge));
-
-                gtk::glib::ControlFlow::Continue
-            });
-        }
+        let status_bar = StatusBar::new();
+        container.append(status_bar.widget());
 
         let title_row = gtk::Box::builder()
             .orientation(Orientation::Horizontal)
@@ -215,10 +116,17 @@ impl Header {
             .css_classes(["orbit-tab", "flat"])
             .hexpand(true)
             .build();
+        
+        let audio_tab = gtk::Button::builder()
+            .label("Audio")
+            .css_classes(["orbit-tab", "flat"])
+            .hexpand(true)
+            .build();
 
         tab_bar.append(&wifi_tab);
         tab_bar.append(&bluetooth_tab);
         tab_bar.append(&vpn_tab);
+        tab_bar.append(&audio_tab);
 
         container.append(&title_row);
         container.append(&tab_bar);
@@ -228,6 +136,7 @@ impl Header {
             wifi_tab,
             bluetooth_tab,
             vpn_tab,
+            audio_tab,
             wired_button,
             power_switch,
             power_box,
@@ -266,6 +175,10 @@ impl Header {
     pub fn vpn_tab(&self) -> &gtk::Button {
         &self.vpn_tab
     }
+    
+    pub fn audio_tab(&self) -> &gtk::Button {
+        &self.audio_tab
+    }
 
     pub fn wired_button(&self) -> &gtk::Button {
         &self.wired_button
@@ -275,6 +188,9 @@ impl Header {
         self.wifi_tab.remove_css_class("active");
         self.bluetooth_tab.remove_css_class("active");
         self.vpn_tab.remove_css_class("active");
+        self.audio_tab.remove_css_class("active");
+        self.power_box.set_visible(false);
+        self.wired_button.set_visible(false);
 
         match tab {
             "wifi" | "saved" => {
@@ -287,12 +203,12 @@ impl Header {
                 self.bluetooth_tab.add_css_class("active");
                 self.power_box.set_visible(true);
                 self.power_label.set_label("Bluetooth");
-                self.wired_button.set_visible(false);
             }
             "vpn" => {
                 self.vpn_tab.add_css_class("active");
-                self.power_box.set_visible(false);
-                self.wired_button.set_visible(false);
+            }
+            "audio" => {
+                self.audio_tab.add_css_class("active");
             }
             _ => {}
         }

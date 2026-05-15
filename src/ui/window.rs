@@ -11,6 +11,7 @@ use super::network_list::NetworkList;
 use super::device_list::DeviceList;
 use super::saved_networks_list::SavedNetworksList;
 use super::vpn_list::VpnList;
+use super::audio::Audio;
 use crate::dbus::network_manager::{NetworkDetails, WiredProfile};
 
 pub struct OrbitWindow {
@@ -22,6 +23,7 @@ pub struct OrbitWindow {
     saved_networks_list: SavedNetworksList,
     device_list: DeviceList,
     vpn_list: VpnList,
+    audio_list: Audio,
     stack: gtk::Stack,
     details_revealer: gtk::Revealer,
     details_box: gtk::Box,
@@ -75,6 +77,7 @@ impl Clone for OrbitWindow {
             saved_networks_list: self.saved_networks_list.clone(),
             device_list: self.device_list.clone(),
             vpn_list: self.vpn_list.clone(),
+            audio_list: self.audio_list.clone(),
             stack: self.stack.clone(),
             details_revealer: self.details_revealer.clone(),
             details_box: self.details_box.clone(),
@@ -179,10 +182,12 @@ impl OrbitWindow {
         let saved_networks_list = SavedNetworksList::new();
         let device_list = DeviceList::new();
         let vpn_list = VpnList::new();
+        let audio_list = Audio::new();
 
         stack.add_named(network_list.widget(), Some("wifi"));
         stack.add_named(device_list.widget(), Some("bluetooth"));
         stack.add_named(vpn_list.widget(), Some("vpn"));
+        stack.add_named(audio_list.widget(), Some("audio"));
         stack.set_visible_child_name("wifi");
         stack.set_size_request(400, 350);
 
@@ -676,6 +681,7 @@ impl OrbitWindow {
             saved_networks_list,
             device_list,
             vpn_list,
+            audio_list,
             stack,
             details_revealer,
             details_box,
@@ -850,6 +856,10 @@ impl OrbitWindow {
 
     pub fn vpn_list(&self) -> &VpnList {
         &self.vpn_list
+    }
+    
+    pub fn audio_list(&self) -> &Audio {
+        &self.audio_list
     }
 
     pub fn saved_networks_list(&self) -> &SavedNetworksList {

@@ -1,3 +1,4 @@
 /target
 aur/
 FEATURES.md
+/Cargo.lock

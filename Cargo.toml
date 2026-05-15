@@ -27,6 +27,7 @@ bardecoder = "0.5"
 image = "0.24"
 starship-battery = "0.11"
 tempfile = "3.27.0"
+chrono = "0.4.44"
 
 [profile.release]
 opt-level = 3
